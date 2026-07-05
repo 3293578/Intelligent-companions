@@ -1,0 +1,9 @@
+.local-data/
+node_modules/
+.superpowers/
+.agents/
+.env
+.env.local
+.env.*.local
+.git.broken-*
+.git-store.broken-*

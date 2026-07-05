@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>English Companions</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="companion-rail" aria-label="Companion list">
+      <div class="brand-block">
+        <div class="brand-mark">EC</div>
+        <div>
+          <h1>English Companions</h1>
+          <p>Warm chat plus daily curated picks.</p>
+        </div>
+      </div>
+
+      <button class="profile-card" id="openProfileButton" type="button"></button>
+
+      <button class="primary-action" id="openCreateButton" type="button">Create companion</button>
+
+      <div class="section-label">My companions</div>
+      <div class="companion-list" id="companionList"></div>
+    </aside>
+
+    <main class="chat-panel" aria-label="Selected companion chat">
+      <header class="chat-header" id="chatHeader"></header>
+      <section class="message-list" id="messageList" aria-live="polite"></section>
+      <form class="composer" id="messageForm">
+        <input id="messageInput" type="text" autocomplete="off" placeholder="Share your day in English...">
+        <button type="submit">Send</button>
+      </form>
+    </main>
+
+    <aside class="studio-panel" aria-label="Companion studio">
+      <div id="studioPanel"></div>
+    </aside>
+  </div>
+
+  <dialog class="create-dialog" id="createDialog">
+    <form id="createForm" method="dialog">
+      <div class="dialog-header">
+        <div>
+          <h2>Create a companion</h2>
+          <p>Set the emotional role and the daily content habit.</p>
+        </div>
+        <button class="icon-button" id="closeCreateButton" type="button" aria-label="Close">x</button>
+      </div>
+
+      <div class="form-grid">
+        <label>
+          Name
+          <input name="name" type="text" value="Mia" required>
+        </label>
+        <label>
+          Relationship
+          <select name="relationshipType">
+            <option>Girlfriend</option>
+            <option>Boyfriend</option>
+            <option>Bestie</option>
+            <option>Mentor</option>
+            <option>Tree hole</option>
+            <option>Knowledge brother</option>
+          </select>
+        </label>
+        <label class="wide">
+          Personality and tone
+          <input name="personality" type="text" value="Warm, playful, and emotionally supportive">
+        </label>
+        <label>
+          Push time
+          <input name="pushTime" type="time" value="08:00">
+        </label>
+        <label>
+          Max daily pushes
+          <input name="maxDaily" type="number" min="1" max="5" value="1">
+        </label>
+        <label>
+          Avatar style
+          <select name="avatarStyle">
+            <option>Soft anime portrait</option>
+            <option>Clean realistic portrait</option>
+            <option>Minimal illustrated portrait</option>
+            <option>Dreamy editorial portrait</option>
+          </select>
+        </label>
+        <label>
+          Emotional closeness
+          <select name="intimacyLevel">
+            <option value="gentle">Gentle</option>
+            <option value="close">Close</option>
+            <option value="deep">Deep</option>
+          </select>
+        </label>
+        <label>
+          Support mode
+          <select name="supportMode">
+            <option value="listen_first">Listen first</option>
+            <option value="gentle_advice">Gentle advice</option>
+            <option value="cheer_up">Cheer up</option>
+          </select>
+        </label>
+        <label>
+          Proactive care
+          <select name="proactiveCareFrequency">
+            <option value="sometimes">Sometimes</option>
+            <option value="daily">Daily</option>
+            <option value="rarely">Rarely</option>
+          </select>
+        </label>
+        <label>
+          Correction mode
+          <select name="correctionMode">
+            <option value="after_reply">After reply</option>
+            <option value="gentle_inline">Gentle inline</option>
+            <option value="off">Off</option>
+          </select>
+        </label>
+        <label>
+          Correction level
+          <select name="correctionIntensity">
+            <option value="light">Light</option>
+            <option value="balanced">Balanced</option>
+            <option value="detailed">Detailed</option>
+          </select>
+        </label>
+        <label>
+          Reply length
+          <select name="replyLength">
+            <option value="medium">Medium</option>
+            <option value="short">Short</option>
+            <option value="long">Long</option>
+          </select>
+        </label>
+        <label class="wide">
+          Custom keywords
+          <input name="customKeywords" type="text" value="cooking, travel" placeholder="cooking, travel, local cafes">
+        </label>
+      </div>
+
+      <fieldset>
+        <legend>Daily push categories</legend>
+        <div class="checkbox-grid" id="categoryFields"></div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Content source providers</legend>
+        <div class="checkbox-grid" id="providerFields">
+          <label>
+            <input type="checkbox" name="enabledProviders" value="youtube" checked>
+            YouTube videos
+          </label>
+          <label>
+            <input type="checkbox" name="enabledProviders" value="news" checked>
+            News APIs
+          </label>
+          <label>
+            <input type="checkbox" name="enabledProviders" value="reddit" checked>
+            Reddit trends
+          </label>
+          <label>
+            <input type="checkbox" name="enabledProviders" value="web_search" checked>
+            Web search
+          </label>
+        </div>
+      </fieldset>
+
+      <label class="memory-toggle">
+        <input name="memoryEnabled" type="checkbox" checked>
+        Remember important details as a local summary
+      </label>
+      <label class="memory-toggle">
+        <input name="naturalPhrases" type="checkbox" checked>
+        Suggest natural English phrases when useful
+      </label>
+
+      <section class="preview-panel" aria-label="Sample conversation preview">
+        <div class="preview-heading">
+          <h3>Sample conversation</h3>
+          <p>Preview how this companion will chat and share Daily Picks.</p>
+        </div>
+        <div id="companionPreview"></div>
+      </section>
+
+      <div class="dialog-actions">
+        <button class="secondary-action" type="button" id="cancelCreateButton">Cancel</button>
+        <button class="primary-action" type="submit" id="saveCompanionButton">Create and chat</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog class="create-dialog" id="profileDialog">
+    <form id="profileForm" method="dialog">
+      <div class="dialog-header">
+        <div>
+          <h2>Local profile</h2>
+          <p>This MVP stores your profile, companions, and chats in this browser only.</p>
+        </div>
+        <button class="icon-button" id="closeProfileButton" type="button" aria-label="Close profile">x</button>
+      </div>
+
+      <div class="form-grid">
+        <label>
+          Display name
+          <input name="displayName" type="text" required>
+        </label>
+        <label>
+          Email
+          <input name="email" type="email" required>
+        </label>
+      </div>
+
+      <fieldset>
+        <legend>Privacy</legend>
+        <label class="memory-toggle">
+          <input name="localOnly" type="checkbox" checked disabled>
+          Store data locally in this browser
+        </label>
+        <label class="memory-toggle">
+          <input name="allowAiTraining" type="checkbox">
+          Allow future AI training use
+        </label>
+        <label class="memory-toggle">
+          <input name="showPrivacyNotice" type="checkbox" checked>
+          Show privacy notice in the studio
+        </label>
+      </fieldset>
+
+      <div class="dialog-actions">
+        <button class="secondary-action" type="button" id="cancelProfileButton">Cancel</button>
+        <button class="primary-action" type="submit">Save profile</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script type="module" src="src/app.js"></script>
+</body>
+</html>
