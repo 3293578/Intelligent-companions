@@ -70,6 +70,18 @@
           <input name="personality" type="text" value="Warm, playful, and emotionally supportive">
         </label>
         <label>
+          Practice language
+          <select name="language">
+            <option value="english">English</option>
+            <option value="japanese">Japanese 日本語</option>
+            <option value="korean">Korean 한국어</option>
+            <option value="french">French Français</option>
+            <option value="spanish">Spanish Español</option>
+            <option value="german">German Deutsch</option>
+            <option value="italian">Italian Italiano</option>
+          </select>
+        </label>
+        <label>
           Push time
           <input name="pushTime" type="time" value="08:00">
         </label>
@@ -234,6 +246,9 @@
       </div>
     </form>
   </dialog>
+
+  <button class="translate-trigger" id="translateTrigger" type="button" hidden>译 Translate</button>
+  <aside class="translate-popover" id="translatePopover" hidden aria-live="polite"></aside>
 
   <script type="module" src="src/app.js"></script>
 </body>

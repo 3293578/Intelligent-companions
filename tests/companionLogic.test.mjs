@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   buildContentRetrievalPlan,
   buildCompanionSystemPrompt,
+  buildWelcomeContent,
   CATEGORY_LIBRARY,
   createAssistantReply,
   createCompanion,
@@ -14,6 +15,7 @@ import {
   detectUserEmotion,
   deserializeState,
   generateCompanionPreview,
+  LANGUAGE_LIBRARY,
   normalizeRetrievedContent,
   previewNotification,
   runScheduledDailyPushes,
@@ -281,7 +283,7 @@ test('builds a companion system prompt from role, care style, memory, and daily 
   assert.match(prompt, /correct English after the emotional reply/i);
   assert.match(prompt, /balanced correction/i);
   assert.match(prompt, /medium replies/i);
-  assert.match(prompt, /natural phrase/i);
+  assert.match(prompt, /natural English phrase/i);
   assert.match(prompt, /daily share/i);
   assert.match(prompt, /light emojis/i);
 });
@@ -851,4 +853,106 @@ test('updates local user profile and privacy settings', () => {
   assert.equal(updated.privacy.localOnly, true);
   assert.equal(updated.privacy.allowAiTraining, false);
   assert.equal(updated.privacy.showPrivacyNotice, false);
+});
+
+test('local fallback replies never leak raw memory template text', () => {
+  const companion = createCompanion({
+    name: 'Luna',
+    relationshipType: 'Girlfriend',
+    memoryEnabled: true,
+    memorySummary: 'User shared: why you always say still remember.'
+  });
+  const positive = createAssistantReply(companion, createUserMessage(companion.id, 'I had a great day.'), []);
+  const negative = createAssistantReply(companion, createUserMessage(companion.id, 'I feel sad today.'), []);
+
+  for (const reply of [positive, negative]) {
+    assert.ok(!reply.content.includes('I still remember'));
+    assert.ok(!reply.content.includes('User shared'));
+    assert.ok(!reply.content.includes('as your girlfriend'));
+  }
+});
+
+test('companion system prompt bans robotic template phrasing', () => {
+  const prompt = buildCompanionSystemPrompt(createCompanion({
+    name: 'Luna',
+    relationshipType: 'Girlfriend',
+    personality: 'Gentle and playful'
+  }));
+
+  assert.match(prompt, /Sound like a real person/i);
+  assert.match(prompt, /never quote memory notes verbatim/i);
+  assert.match(prompt, /at most one question per reply/i);
+  assert.match(prompt, /Avoid repeating the same opening line/i);
+});
+
+test('createCompanion defaults language to english and normalizes unknown values', () => {
+  assert.equal(createCompanion({ name: 'Luna' }).language, 'english');
+  assert.equal(createCompanion({ name: 'Aki', language: 'Japanese' }).language, 'japanese');
+  assert.equal(createCompanion({ name: 'X', language: 'klingon' }).language, 'english');
+});
+
+test('updateCompanion can change the practice language', () => {
+  const companion = createCompanion({ name: 'Sora', language: 'english' });
+  assert.equal(updateCompanion(companion, { language: 'korean' }).language, 'korean');
+  // Unspecified language is preserved.
+  assert.equal(updateCompanion(companion, { personality: 'calm' }).language, 'english');
+});
+
+test('system prompt instructs the companion to speak the chosen language', () => {
+  const jp = buildCompanionSystemPrompt(createCompanion({ name: 'Aki', language: 'japanese' }));
+  assert.match(jp, /practice Japanese/);
+  assert.match(jp, /colloquial Japanese/);
+  assert.ok(!jp.includes('colloquial English'));
+
+  const fr = buildCompanionSystemPrompt(createCompanion({ name: 'Elo', language: 'french' }));
+  assert.match(fr, /colloquial French/);
+});
+
+test('deserializeState normalizes missing language on stored companions', () => {
+  const raw = JSON.stringify({
+    user: null,
+    selectedCompanionId: 'c1',
+    companions: [{ id: 'c1', name: 'Old', pushSchedule: { time: '08:00', maxDaily: 1 } }],
+    messages: []
+  });
+  const state = deserializeState(raw);
+  assert.equal(state.companions[0].language, 'english');
+});
+
+test('LANGUAGE_LIBRARY exposes the supported practice languages', () => {
+  assert.ok(LANGUAGE_LIBRARY.english);
+  assert.ok(LANGUAGE_LIBRARY.japanese);
+  assert.equal(LANGUAGE_LIBRARY.korean.translateTarget, 'Korean');
+});
+
+test('welcome content is written in the companion practice language', () => {
+  const enWelcome = buildWelcomeContent(createCompanion({ name: 'Luna', language: 'english' }));
+  assert.match(enWelcome, /Luna/);
+  assert.match(enWelcome, /English/);
+
+  const koWelcome = buildWelcomeContent(createCompanion({ name: 'Fina', language: 'korean' }));
+  assert.match(koWelcome, /Fina/);
+  assert.match(koWelcome, /[가-힣]/); // contains Hangul
+  assert.ok(!/[a-z]{4,}/.test(koWelcome.replace('Fina', ''))); // no long English words besides the name
+
+  const jaWelcome = buildWelcomeContent(createCompanion({ name: 'Aki', language: 'japanese' }));
+  assert.match(jaWelcome, /[ぁ-んァ-ン一-鿿]/); // contains kana/kanji
+});
+
+test('scheduled care check-in is generated in the companion practice language', () => {
+  const korean = createCompanion({
+    id: 'c_ko',
+    name: 'Fina',
+    language: 'korean',
+    pushTime: '08:00',
+    careStyle: { proactiveCareFrequency: 'daily' }
+  });
+  const state = { user: null, selectedCompanionId: korean.id, companions: [korean], messages: [] };
+  // Use an even day so the daily check-in fires deterministically.
+  const result = runScheduledDailyPushes(state, { now: '2026-07-06T09:00:00' });
+  const checkIn = result.messages.find((m) => m.metadata?.kind === 'care_check_in');
+
+  assert.ok(checkIn, 'expected a care check-in to be generated');
+  assert.match(checkIn.content, /Fina/);
+  assert.match(checkIn.content, /[가-힣]/); // Korean text, not English
 });

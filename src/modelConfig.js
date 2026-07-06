@@ -31,9 +31,13 @@ export function normalizeModelSelection(input = {}) {
     ? input.provider
     : 'deepseek';
   const preset = MODEL_PROVIDER_PRESETS[provider];
-  const apiMode = ['chat_completions', 'responses'].includes(input.apiMode)
-    ? input.apiMode
-    : preset.apiMode;
+  // DeepSeek only serves the chat completions API, so lock the mode to avoid
+  // a wasted failing round trip to /responses on every request.
+  const apiMode = provider === 'deepseek'
+    ? 'chat_completions'
+    : ['chat_completions', 'responses'].includes(input.apiMode)
+      ? input.apiMode
+      : preset.apiMode;
 
   return {
     provider,

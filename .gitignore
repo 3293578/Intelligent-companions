@@ -7,3 +7,5 @@ node_modules/
 .env.*.local
 .git.broken-*
 .git-store.broken-*
+# Internal design notes kept out of the public repo
+Project instruction.txt

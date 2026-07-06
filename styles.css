@@ -834,3 +834,185 @@ legend {
     grid-template-columns: 1fr;
   }
 }
+
+/* Word selection translation */
+.translate-trigger {
+  position: fixed;
+  z-index: 60;
+  transform: translateX(-50%);
+  border: 1px solid var(--accent-strong);
+  background: var(--accent);
+  color: #ffffff;
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: var(--shadow);
+}
+
+.translate-trigger:hover {
+  background: var(--accent-strong);
+}
+
+.translate-popover {
+  position: fixed;
+  z-index: 61;
+  width: min(340px, calc(100vw - 32px));
+  max-height: 60vh;
+  overflow-y: auto;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px 16px;
+  box-shadow: var(--shadow);
+}
+
+.translate-popover .popover-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.translate-popover .selected-text {
+  font-weight: 700;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.translate-popover .popover-close {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 1rem;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.translate-popover .pronunciation {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin: 0 0 6px;
+}
+
+.translate-popover .translation {
+  font-size: 1.05rem;
+  color: var(--accent-strong);
+  font-weight: 700;
+  margin: 0 0 8px;
+  overflow-wrap: anywhere;
+}
+
+.translate-popover .explanation {
+  font-size: 0.88rem;
+  color: var(--ink);
+  margin: 0 0 8px;
+  line-height: 1.5;
+}
+
+.translate-popover .example-list {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 10px;
+}
+
+.translate-popover .example-item {
+  font-size: 0.82rem;
+  color: var(--muted);
+  background: var(--soft);
+  border-radius: 8px;
+  padding: 6px 9px;
+  line-height: 1.45;
+}
+
+.translate-popover .popover-status {
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin: 4px 0 8px;
+}
+
+.translate-popover .popover-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.translate-popover .save-vocab {
+  border: 1px solid var(--accent);
+  background: var(--mint);
+  color: var(--accent-strong);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.translate-popover .save-vocab:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* Word book */
+.vocab-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.vocab-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  background: var(--soft);
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+
+.vocab-item .vocab-text {
+  font-weight: 600;
+  color: var(--ink);
+  font-size: 0.85rem;
+  overflow-wrap: anywhere;
+}
+
+.vocab-item .vocab-translation {
+  display: block;
+  color: var(--muted);
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
+}
+
+.vocab-item .vocab-remove {
+  border: 0;
+  background: transparent;
+  color: var(--danger);
+  cursor: pointer;
+  font-size: 0.85rem;
+  line-height: 1;
+  padding: 2px 4px;
+}
+
+.model-error {
+  color: var(--danger);
+  overflow-wrap: anywhere;
+}
+
+.chat-header-tags {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.lang-pill {
+  background: var(--blue);
+  color: var(--accent-strong);
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+}

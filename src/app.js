@@ -1,6 +1,9 @@
 import {
   buildContentRetrievalPlan,
   CATEGORY_LIBRARY,
+  LANGUAGE_LIBRARY,
+  buildWelcomeContent,
+  companionsDueForPush,
   createAssistantReply,
   createCompanion,
   createDailyPush,
@@ -27,6 +30,12 @@ import {
   tagAssistantReplySource
 } from './chatUiState.js';
 import { retrieveContentForCompanion } from './contentAdapters.js';
+import {
+  addVocabEntry,
+  deserializeVocabBook,
+  removeVocabEntry,
+  serializeVocabBook
+} from './vocabBook.js';
 
 const STORAGE_KEY = 'english-companions-state-v1';
 
@@ -50,7 +59,9 @@ const els = {
   profileDialog: document.querySelector('#profileDialog'),
   profileForm: document.querySelector('#profileForm'),
   closeProfileButton: document.querySelector('#closeProfileButton'),
-  cancelProfileButton: document.querySelector('#cancelProfileButton')
+  cancelProfileButton: document.querySelector('#cancelProfileButton'),
+  translateTrigger: document.querySelector('#translateTrigger'),
+  translatePopover: document.querySelector('#translatePopover')
 };
 
 let state = loadState();
@@ -94,6 +105,9 @@ let chatUiState = {
 };
 let readReceipts = loadReadReceipts();
 let savedPicks = loadSavedPicks();
+let vocabBook = loadVocabBook();
+let pendingSelection = null;
+let activeTranslation = null;
 
 function loadState() {
   const raw = localStorage.getItem(STORAGE_KEY);
@@ -130,6 +144,14 @@ function saveSavedPicks() {
   localStorage.setItem(`${STORAGE_KEY}-saved-picks`, JSON.stringify(savedPicks));
 }
 
+function loadVocabBook() {
+  return deserializeVocabBook(localStorage.getItem(`${STORAGE_KEY}-vocab-book`) || '[]');
+}
+
+function saveVocabBook() {
+  localStorage.setItem(`${STORAGE_KEY}-vocab-book`, serializeVocabBook(vocabBook));
+}
+
 function activeCompanion() {
   return state.companions.find((companion) => companion.id === state.selectedCompanionId) || state.companions[0];
 }
@@ -140,6 +162,13 @@ function companionMessages(companionId) {
 
 function formatCategory(category) {
   return CATEGORY_LIBRARY[category]?.label || category.replaceAll('_', ' ');
+}
+
+function formatLanguage(language) {
+  const entry = LANGUAGE_LIBRARY[language] || LANGUAGE_LIBRARY.english;
+  return entry.nativeLabel && entry.nativeLabel !== entry.label
+    ? `${entry.label} ${entry.nativeLabel}`
+    : entry.label;
 }
 
 function formatCareValue(value) {
@@ -249,7 +278,10 @@ function renderChatHeader(companion) {
         <p class="companion-meta">${escapeHtml(companion.relationshipType)} / ${escapeHtml(companion.personality)}</p>
       </div>
     </div>
-    <span class="status-pill" title="${escapeHtml(runtimeStatus.llm?.baseUrl || 'Local fallback')}">${escapeHtml(llmLabel)}</span>
+    <div class="chat-header-tags">
+      <span class="lang-pill">${escapeHtml(formatLanguage(companion.language))}</span>
+      <span class="status-pill" title="${escapeHtml(runtimeStatus.llm?.baseUrl || 'Local fallback')}">${escapeHtml(llmLabel)}</span>
+    </div>
   `;
 }
 
@@ -365,6 +397,7 @@ function renderStudio(companion) {
     <div class="studio-card">
       <h3>Companion setup</h3>
       <div class="studio-row"><span>Relationship</span><strong>${escapeHtml(companion.relationshipType)}</strong></div>
+      <div class="studio-row"><span>Language</span><strong>${escapeHtml(formatLanguage(companion.language))}</strong></div>
       <div class="studio-row"><span>Tone</span><strong>${escapeHtml(companion.personality)}</strong></div>
       <div class="studio-row"><span>Avatar</span><strong>${escapeHtml(companion.avatarStyle)}</strong></div>
       <div class="studio-row"><span>Closeness</span><strong>${escapeHtml(formatCareValue(companion.careStyle?.intimacyLevel || 'gentle'))}</strong></div>
@@ -423,6 +456,25 @@ function renderStudio(companion) {
           `).join('')}
         </div>
       ` : '<p class="studio-muted">Save a Daily Pick from the chat to keep it here for later.</p>'}
+    </div>
+
+    <div class="studio-card">
+      <h3>Word book</h3>
+      <div class="studio-row"><span>Saved words</span><strong>${vocabBook.length}</strong></div>
+      ${vocabBook.length > 0 ? `
+        <div class="vocab-list">
+          ${vocabBook.slice(0, 6).map((entry) => `
+            <div class="vocab-item">
+              <span>
+                <span class="vocab-text">${escapeHtml(entry.text)}</span>
+                <span class="vocab-translation">${escapeHtml(entry.translation || entry.explanation || '')}</span>
+              </span>
+              <button class="vocab-remove" type="button" data-action="remove-vocab" data-vocab-id="${escapeHtml(entry.id)}" aria-label="Remove word">x</button>
+            </div>
+          `).join('')}
+        </div>
+        ${vocabBook.length > 6 ? `<p class="studio-muted hint">Showing 6 of ${vocabBook.length} saved words.</p>` : ''}
+      ` : '<p class="studio-muted">Select any word or phrase in the chat to translate it, then save it here.</p>'}
     </div>
 
     <div class="studio-card">
@@ -555,6 +607,7 @@ function renderModelSettings() {
         </label>
         <div class="studio-row"><span>Key</span><strong>${llm.configured ? 'Available' : escapeHtml(llm.keyEnv || selectedOption.keyEnv || 'Not set')}</strong></div>
         <div class="studio-row"><span>Status</span><strong>${escapeHtml(statusText)}</strong></div>
+        ${llm.lastChatError ? `<p class="studio-muted hint model-error">Last LLM error: ${escapeHtml(llm.lastChatError.message)}</p>` : ''}
         <div class="studio-row"><span>Companions</span><strong>Unchanged</strong></div>
         <button class="secondary-action" type="submit" ${modelSettingsState.saving ? 'disabled' : ''}>${modelSettingsState.saving ? 'Saving' : 'Save model'}</button>
       </form>
@@ -726,6 +779,7 @@ async function sendMessage(content) {
   saveState();
   render();
   await refreshMemoryStatus(companion.id);
+  await refreshRuntimeStatus();
 }
 
 async function retrieveSourcesFor(companion) {
@@ -772,9 +826,184 @@ function saveDailyPickFromAction(target) {
   render();
 }
 
+function hideTranslateTrigger() {
+  els.translateTrigger.hidden = true;
+}
+
+function hideTranslatePopover() {
+  els.translatePopover.hidden = true;
+  activeTranslation = null;
+}
+
+function handleMessageSelection() {
+  const selection = window.getSelection();
+  const text = selection?.toString().trim() || '';
+  if (!text || text.length > 120 || !selection || selection.rangeCount === 0) {
+    hideTranslateTrigger();
+    return;
+  }
+  const range = selection.getRangeAt(0);
+  if (!els.messageList.contains(range.commonAncestorContainer)) {
+    hideTranslateTrigger();
+    return;
+  }
+  const anchorElement = range.commonAncestorContainer.nodeType === Node.ELEMENT_NODE
+    ? range.commonAncestorContainer
+    : range.commonAncestorContainer.parentElement;
+  const rect = range.getBoundingClientRect();
+  pendingSelection = {
+    text,
+    context: anchorElement?.closest('.message')?.querySelector('p')?.textContent?.trim().slice(0, 300) || '',
+    anchor: {
+      top: rect.top,
+      left: rect.left + rect.width / 2,
+      bottom: rect.bottom
+    }
+  };
+  els.translateTrigger.style.top = `${Math.max(rect.top - 40, 8)}px`;
+  els.translateTrigger.style.left = `${Math.min(Math.max(rect.left + rect.width / 2, 70), window.innerWidth - 70)}px`;
+  els.translateTrigger.hidden = false;
+}
+
+function positionTranslatePopover(anchor) {
+  const width = Math.min(340, window.innerWidth - 32);
+  const left = Math.min(Math.max(anchor.left - width / 2, 16), window.innerWidth - width - 16);
+  const top = anchor.bottom + 8 + 320 > window.innerHeight
+    ? Math.max(anchor.top - 8 - 280, 16)
+    : anchor.bottom + 8;
+  els.translatePopover.style.left = `${left}px`;
+  els.translatePopover.style.top = `${top}px`;
+}
+
+function renderTranslatePopover(view) {
+  const { status, selection, payload } = view;
+  const header = `
+    <div class="popover-header">
+      <span class="selected-text">${escapeHtml(selection.text)}</span>
+      <button class="popover-close" type="button" data-action="close-popover" aria-label="Close translation">x</button>
+    </div>
+  `;
+
+  if (status === 'loading') {
+    els.translatePopover.innerHTML = `${header}<p class="popover-status">Translating...</p>`;
+    return;
+  }
+
+  if (status === 'error' || !payload?.result) {
+    els.translatePopover.innerHTML = `${header}<p class="popover-status">Translation is unavailable right now. Please try again.</p>`;
+    return;
+  }
+
+  const { result } = payload;
+  const alreadySaved = vocabBook.some((entry) => entry.text.toLowerCase() === selection.text.toLowerCase());
+  els.translatePopover.innerHTML = `
+    ${header}
+    ${result.pronunciation ? `<p class="pronunciation">${escapeHtml(result.pronunciation)}</p>` : ''}
+    ${result.translation
+      ? `<p class="translation">${escapeHtml(result.translation)}</p>`
+      : ''}
+    ${result.explanation ? `<p class="explanation">${escapeHtml(result.explanation)}</p>` : ''}
+    ${result.examples?.length > 0 ? `
+      <div class="example-list">
+        ${result.examples.map((item) => `<div class="example-item">${escapeHtml(item)}</div>`).join('')}
+      </div>
+    ` : ''}
+    ${payload.source === 'llm' ? `
+      <div class="popover-actions">
+        <button class="save-vocab" type="button" data-action="save-vocab" ${alreadySaved ? 'disabled' : ''}>
+          ${alreadySaved ? 'Saved to word book' : 'Save to word book'}
+        </button>
+      </div>
+    ` : ''}
+  `;
+}
+
+async function openTranslatePopover(selection) {
+  hideTranslateTrigger();
+  window.getSelection()?.removeAllRanges();
+  activeTranslation = null;
+  positionTranslatePopover(selection.anchor);
+  renderTranslatePopover({ status: 'loading', selection });
+  els.translatePopover.hidden = false;
+
+  // The user's native language is Chinese, so a selection in the companion's
+  // practice language should be explained in Chinese. Only when the user
+  // selects their own Chinese text do we translate the other way, into the
+  // companion's language. Japanese/Korean companions use Han characters, so we
+  // don't treat Han script as "Chinese the user typed" for them.
+  const companion = activeCompanion();
+  const companionLanguage = companion?.language || 'english';
+  const companionUsesHan = ['japanese', 'korean'].includes(companionLanguage);
+  const looksChinese = /[一-鿿]/.test(selection.text) && !companionUsesHan;
+  const targetLanguage = looksChinese
+    ? (LANGUAGE_LIBRARY[companionLanguage]?.translateTarget || 'English')
+    : 'Chinese';
+
+  try {
+    const response = await fetch('/api/translate', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({
+        text: selection.text,
+        context: selection.context,
+        targetLanguage
+      })
+    });
+    const payload = await response.json();
+    if (!response.ok || payload?.error) throw new Error(payload?.error || 'Translate failed');
+    if (els.translatePopover.hidden) return;
+    activeTranslation = { selection, payload };
+    renderTranslatePopover({ status: 'ready', selection, payload });
+  } catch {
+    if (els.translatePopover.hidden) return;
+    renderTranslatePopover({ status: 'error', selection });
+  }
+}
+
+function saveActiveTranslation() {
+  if (!activeTranslation?.payload?.result) return;
+  const { selection, payload } = activeTranslation;
+  vocabBook = addVocabEntry(vocabBook, {
+    text: selection.text,
+    translation: payload.result.translation,
+    pronunciation: payload.result.pronunciation,
+    explanation: payload.result.explanation,
+    examples: payload.result.examples,
+    companionId: activeCompanion()?.id || '',
+    targetLanguage: payload.targetLanguage || ''
+  });
+  saveVocabBook();
+  renderTranslatePopover({ status: 'ready', selection, payload });
+  render();
+}
+
+function showBrowserNotifications(notifications = []) {
+  if (!notificationPreferences.enabled) return;
+  if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+  for (const item of notifications.slice(0, 3)) {
+    try {
+      // eslint-disable-next-line no-new
+      new Notification(item.title, { body: item.body });
+    } catch {
+      // Some environments (e.g. insecure origins) block constructor use.
+      return;
+    }
+  }
+}
+
+function requestNotificationPermission() {
+  if (typeof Notification === 'undefined') return;
+  if (Notification.permission === 'default') {
+    Notification.requestPermission().catch(() => {});
+  }
+}
+
 async function runLocalScheduler(now = new Date()) {
+  const dueCompanions = companionsDueForPush(state, { now: now.toISOString() });
   const sourcesByCompanion = {};
-  for (const companion of state.companions) {
+  for (const companion of dueCompanions) {
     const sources = await retrieveSourcesFor(companion);
     if (sources) sourcesByCompanion[companion.id] = sources;
   }
@@ -792,6 +1021,7 @@ async function runLocalScheduler(now = new Date()) {
     lastNotifications: result.notifications,
     lastSourceMode: Object.keys(sourcesByCompanion).length > 0 ? 'external' : 'mock'
   };
+  showBrowserNotifications(result.notifications);
   saveState();
   render();
 }
@@ -803,6 +1033,7 @@ function openCompanionDialog(mode = 'create') {
     els.createForm.elements.name.value = companion.name;
     els.createForm.elements.relationshipType.value = companion.relationshipType;
     els.createForm.elements.personality.value = companion.personality;
+    els.createForm.elements.language.value = companion.language || 'english';
     els.createForm.elements.pushTime.value = companion.pushSchedule.time;
     els.createForm.elements.maxDaily.value = companion.pushSchedule.maxDaily;
     els.createForm.elements.avatarStyle.value = companion.avatarStyle;
@@ -845,6 +1076,7 @@ function companionInputFromForm(form) {
     name: data.get('name'),
     relationshipType: data.get('relationshipType'),
     personality: data.get('personality'),
+    language: data.get('language'),
     pushCategories: data.getAll('pushCategories'),
     pushTime: data.get('pushTime'),
     maxDaily: data.get('maxDaily'),
@@ -932,7 +1164,7 @@ function saveCompanionFromForm(form) {
       id: `msg_${companion.id}_welcome`,
       companionId: companion.id,
       role: 'assistant',
-      content: `Hi, I'm ${companion.name}. I will chat with you in warm everyday English and bring you daily picks that match what you chose.`,
+      content: buildWelcomeContent(companion),
       createdAt: new Date().toISOString()
     }
   ];
@@ -984,6 +1216,37 @@ els.messageForm.addEventListener('submit', (event) => {
   sendMessage(content);
 });
 
+els.messageList.addEventListener('mouseup', () => {
+  window.setTimeout(handleMessageSelection, 0);
+});
+
+els.translateTrigger.addEventListener('mousedown', (event) => {
+  event.preventDefault();
+});
+els.translateTrigger.addEventListener('click', () => {
+  if (pendingSelection) openTranslatePopover(pendingSelection);
+});
+
+els.translatePopover.addEventListener('click', (event) => {
+  const action = event.target.dataset.action;
+  if (action === 'close-popover') hideTranslatePopover();
+  if (action === 'save-vocab') saveActiveTranslation();
+});
+
+document.addEventListener('mousedown', (event) => {
+  if (els.translateTrigger.hidden && els.translatePopover.hidden) return;
+  if (els.translateTrigger.contains(event.target) || els.translatePopover.contains(event.target)) return;
+  hideTranslateTrigger();
+  hideTranslatePopover();
+});
+
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') {
+    hideTranslateTrigger();
+    hideTranslatePopover();
+  }
+});
+
 els.studioPanel.addEventListener('click', (event) => {
   const action = event.target.dataset.action;
   if (action === 'daily-pick') addDailyPick();
@@ -999,8 +1262,14 @@ els.studioPanel.addEventListener('click', (event) => {
     render();
   }
   if (action === 'save-pick') saveDailyPickFromAction(event.target);
+  if (action === 'remove-vocab') {
+    vocabBook = removeVocabEntry(vocabBook, event.target.dataset.vocabId);
+    saveVocabBook();
+    render();
+  }
   if (action === 'toggle-notifications') {
     notificationPreferences = { ...notificationPreferences, enabled: !notificationPreferences.enabled };
+    if (notificationPreferences.enabled) requestNotificationPermission();
     render();
   }
   if (action === 'toggle-quiet-hours') {

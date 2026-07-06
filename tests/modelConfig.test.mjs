@@ -54,3 +54,17 @@ test('public model config reports key availability without exposing secrets', ()
   assert.equal(Object.hasOwn(config, 'apiKey'), false);
   assert.equal(JSON.stringify(config).includes('secret'), false);
 });
+
+test('deepseek selection always locks api mode to chat completions', () => {
+  const selection = normalizeModelSelection({
+    provider: 'deepseek',
+    apiMode: 'responses'
+  });
+  assert.equal(selection.apiMode, 'chat_completions');
+
+  const openai = normalizeModelSelection({
+    provider: 'openai',
+    apiMode: 'responses'
+  });
+  assert.equal(openai.apiMode, 'responses');
+});

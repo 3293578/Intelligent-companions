@@ -1,6 +1,46 @@
 const DEFAULT_CATEGORIES = ['funny_videos', 'world_news', 'tech_news'];
 const DEFAULT_CONTENT_PROVIDERS = ['youtube', 'news', 'reddit', 'web_search'];
 
+const LANGUAGE_LIBRARY = {
+  english: {
+    label: 'English', name: 'English', nativeLabel: 'English', translateTarget: 'English',
+    welcome: "Hi, I'm {name}. I'll chat with you in warm, everyday English and bring you daily picks that match what you chose.",
+    checkIn: '{name} here — just checking in on you. How are you feeling today, really?'
+  },
+  japanese: {
+    label: 'Japanese', name: 'Japanese', nativeLabel: '日本語', translateTarget: 'Japanese',
+    welcome: 'こんにちは、{name}だよ。毎日やさしい日本語でおしゃべりしながら、あなたに合わせたおすすめも届けるね。',
+    checkIn: '{name}だよ。ちょっと様子を見に来たよ。今日はどんな気分？'
+  },
+  korean: {
+    label: 'Korean', name: 'Korean', nativeLabel: '한국어', translateTarget: 'Korean',
+    welcome: '안녕, 나는 {name}이야. 매일 따뜻하고 자연스러운 한국어로 이야기하고, 네 취향에 맞는 소식도 가져다줄게.',
+    checkIn: '나 {name}이야. 그냥 네가 어떻게 지내는지 궁금해서 왔어. 오늘 기분은 좀 어때?'
+  },
+  french: {
+    label: 'French', name: 'French', nativeLabel: 'Français', translateTarget: 'French',
+    welcome: "Salut, je suis {name}. On va discuter en français simple et chaleureux, et je t'apporterai des trouvailles qui te ressemblent.",
+    checkIn: "C'est {name}. Je prends juste de tes nouvelles. Comment tu te sens aujourd'hui, vraiment ?"
+  },
+  spanish: {
+    label: 'Spanish', name: 'Spanish', nativeLabel: 'Español', translateTarget: 'Spanish',
+    welcome: 'Hola, soy {name}. Charlaré contigo en un español cálido y cotidiano y te traeré recomendaciones a tu medida.',
+    checkIn: 'Soy {name}. Solo quería ver cómo estás. ¿Cómo te sientes hoy, de verdad?'
+  },
+  german: {
+    label: 'German', name: 'German', nativeLabel: 'Deutsch', translateTarget: 'German',
+    welcome: 'Hi, ich bin {name}. Ich plaudere mit dir in warmem, alltäglichem Deutsch und bringe dir passende Empfehlungen.',
+    checkIn: 'Hier ist {name}. Ich wollte nur mal nach dir sehen. Wie geht es dir heute wirklich?'
+  },
+  italian: {
+    label: 'Italian', name: 'Italian', nativeLabel: 'Italiano', translateTarget: 'Italian',
+    welcome: 'Ciao, sono {name}. Chiacchiererò con te in un italiano caldo e quotidiano e ti porterò contenuti scelti per te.',
+    checkIn: 'Sono {name}. Volevo solo sapere come stai. Come ti senti davvero oggi?'
+  }
+};
+
+const DEFAULT_LANGUAGE = 'english';
+
 const CATEGORY_LIBRARY = {
   funny_videos: {
     label: 'Funny video',
@@ -231,6 +271,25 @@ function normalizeChoice(value, allowed, fallback) {
   return allowed.includes(value) ? value : fallback;
 }
 
+function normalizeLanguage(value) {
+  const key = String(value || '').trim().toLowerCase();
+  return Object.hasOwn(LANGUAGE_LIBRARY, key) ? key : DEFAULT_LANGUAGE;
+}
+
+function languageEntry(companion) {
+  return LANGUAGE_LIBRARY[normalizeLanguage(companion?.language)];
+}
+
+function fillTemplate(template, values = {}) {
+  return String(template || '').replace(/\{(\w+)\}/g, (match, key) => (
+    Object.hasOwn(values, key) ? values[key] : match
+  ));
+}
+
+export function buildWelcomeContent(companion) {
+  return fillTemplate(languageEntry(companion).welcome, { name: companion.name });
+}
+
 function normalizeCareStyle(input = {}) {
   const source = input || {};
   return {
@@ -285,6 +344,7 @@ export function createCompanion(input = {}) {
     name,
     relationshipType: input.relationshipType || 'Bestie',
     personality: input.personality || 'Warm, curious, and encouraging',
+    language: normalizeLanguage(input.language),
     avatarStyle: input.avatarStyle || 'Soft portrait',
     avatarColor: input.avatarColor || AVATAR_COLORS[name.length % AVATAR_COLORS.length],
     pushCategories: categories,
@@ -462,21 +522,6 @@ function hasNegativeEmotion(content) {
   return detectUserEmotion(content).valence === 'negative';
 }
 
-function personalityHint(personality) {
-  const lower = personality.toLowerCase();
-  if (lower.includes('sarcastic') || lower.includes('witty')) return 'with a tiny grin';
-  if (lower.includes('calm') || lower.includes('rational')) return 'in a calm, steady way';
-  if (lower.includes('playful')) return 'with playful warmth';
-  return 'gently';
-}
-
-function careCloseness(companion) {
-  const level = companion.careStyle?.intimacyLevel || DEFAULT_CARE_STYLE.intimacyLevel;
-  if (level === 'deep') return 'very close and emotionally present';
-  if (level === 'close') return 'close and affectionate';
-  return 'warm but respectful';
-}
-
 function negativeSupportLine(companion) {
   const mode = companion.careStyle?.supportMode || DEFAULT_CARE_STYLE.supportMode;
   if (mode === 'gentle_advice') {
@@ -491,21 +536,16 @@ function negativeSupportLine(companion) {
 function everydaySupportLine(companion) {
   const mode = companion.careStyle?.supportMode || DEFAULT_CARE_STYLE.supportMode;
   if (mode === 'gentle_advice') {
-    return 'Try saying one small step you want next, and I will help you shape it in natural English.';
+    return 'Try saying one small step you want next, and I will help you shape it.';
   }
   if (mode === 'cheer_up') {
-    return 'Give me one tiny win or silly detail from today, and I will help make it feel lighter in English.';
+    return 'Give me one tiny win or silly detail from today, and I will help make it feel lighter.';
   }
-  return 'Say a little more in English, and I will stay with the feeling instead of rushing to fix it.';
+  return 'Say a little more, and I will stay with the feeling instead of rushing to fix it.';
 }
 
 function createCareCheckIn(companion, now = new Date()) {
-  const closeness = careCloseness(companion);
-  const content = [
-    `${companion.name} here, checking in as your ${companion.relationshipType.toLowerCase()}, staying ${closeness}.`,
-    'How are you today, really?',
-    everydaySupportLine(companion)
-  ].join(' ');
+  const content = fillTemplate(languageEntry(companion).checkIn, { name: companion.name });
 
   return {
     id: createId('care'),
@@ -525,20 +565,20 @@ function supportModeLabel(mode) {
   return 'listen first';
 }
 
-function correctionInstruction(mode) {
-  if (mode === 'off') return 'Do not correct English unless the user explicitly asks.';
-  if (mode === 'gentle_inline') return 'Gently correct English inline only when it helps clarity, without interrupting the emotional flow.';
-  return 'Briefly correct English after the emotional reply, under a small "Natural English" note.';
+function correctionInstruction(mode, languageName = 'English') {
+  if (mode === 'off') return `Do not correct ${languageName} unless the user explicitly asks.`;
+  if (mode === 'gentle_inline') return `Gently correct ${languageName} inline only when it helps clarity, without interrupting the emotional flow.`;
+  return `Briefly correct ${languageName} after the emotional reply, under a small "Natural ${languageName}" note.`;
 }
 
-function practiceInstruction(style) {
+function practiceInstruction(style, languageName = 'English') {
   const practiceStyle = normalizePracticeStyle(style);
   const naturalPhraseLine = practiceStyle.naturalPhrases
-    ? 'Offer one natural phrase alternative when it fits the user\'s sentence.'
+    ? `Offer one natural ${languageName} phrase alternative when it fits the user's sentence.`
     : 'Do not add extra natural phrase alternatives unless asked.';
 
   return [
-    correctionInstruction(practiceStyle.correctionMode),
+    correctionInstruction(practiceStyle.correctionMode, languageName),
     `Use ${practiceStyle.correctionIntensity} correction intensity.`,
     `Keep ${practiceStyle.replyLength} replies unless the user asks for more detail.`,
     naturalPhraseLine
@@ -548,6 +588,7 @@ function practiceInstruction(style) {
 export function buildCompanionSystemPrompt(companion) {
   const careStyle = companion.careStyle || DEFAULT_CARE_STYLE;
   const practiceStyle = companion.practiceStyle || DEFAULT_PRACTICE_STYLE;
+  const language = LANGUAGE_LIBRARY[normalizeLanguage(companion.language)];
   const memoryLine = companion.memoryEnabled && companion.memorySummary
     ? `Known memory summary: ${companion.memorySummary}`
     : 'Memory is off or empty. Do not invent personal history.';
@@ -557,29 +598,28 @@ export function buildCompanionSystemPrompt(companion) {
     `Your personality is: ${companion.personality}.`,
     `Your emotional closeness level is ${careStyle.intimacyLevel}, and your support mode is ${supportModeLabel(careStyle.supportMode)}.`,
     `Your proactive care frequency is ${careStyle.proactiveCareFrequency}; use it to decide how often to check in gently.`,
-    'You are an English speaker and always communicate in warm, colloquial English.',
-    `English practice style: ${practiceInstruction(practiceStyle)}`,
+    `You are helping the user practice ${language.name}, and you always communicate in warm, colloquial ${language.name}. Only switch to another language if the user clearly asks you to.`,
+    `Sound like a real person texting someone they care about: use contractions, vary your sentence length, react to the specific details the user actually mentioned, and occasionally send a short reply when that feels natural.`,
+    'Never announce your role ("as your girlfriend..."), never describe your own tone ("answering warmly..."), never say you are an AI, and never quote memory notes verbatim (no phrases like "I still remember:" or "User shared:"). Weave remembered details into conversation naturally, and only when they fit.',
+    'Ask at most one question per reply. Some replies should not ask anything at all.',
+    'Avoid repeating the same opening line or sentence pattern across replies.',
+    `${language.name} practice style: ${practiceInstruction(practiceStyle, language.name)}`,
     'You care about the user\'s feelings and ordinary daily life. When the user shares negative emotions, follow the support mode before giving advice.',
     memoryLine,
     'When you send a daily share, introduce the content as if you found it yourself, include the link, and add a small emotional reason why you thought of the user.',
     'Use light emojis when natural, but do not overdo them.',
-    'Keep replies conversational, supportive, and suitable for English practice.'
+    `Keep replies conversational, supportive, and suitable for ${language.name} practice.`
   ].join('\n');
 }
 
 export function createAssistantReply(companion, userMessage, priorMessages = []) {
   const content = userMessage.content || '';
   const emotion = detectUserEmotion(content);
-  const memoryLine = companion.memoryEnabled && companion.memorySummary
-    ? ` I still remember: ${companion.memorySummary}.`
-    : '';
-  const recentContext = priorMessages.filter((message) => message.companionId === companion.id).slice(-2);
-  const contextLine = recentContext.length > 0 ? ' I am keeping our thread in mind.' : '';
 
   if (hasNegativeEmotion(content)) {
     const reply = createAssistantMessage(
       companion.id,
-      `${companion.name} here, your ${companion.relationshipType.toLowerCase()}, staying ${careCloseness(companion)}. I am here with you, and you are not alone in this. ${negativeSupportLine(companion)}${memoryLine}`
+      `${companion.name} here. I am here with you, and you are not alone in this. ${negativeSupportLine(companion)}`
     );
     return {
       ...reply,
@@ -592,7 +632,7 @@ export function createAssistantReply(companion, userMessage, priorMessages = [])
 
   const reply = createAssistantMessage(
     companion.id,
-    `${companion.name} here, answering ${personalityHint(companion.personality)} as your ${companion.relationshipType.toLowerCase()}, ${careCloseness(companion)}. I loved hearing that. ${everydaySupportLine(companion)}${contextLine}${memoryLine}`
+    `${companion.name} here. I loved hearing that. ${everydaySupportLine(companion)}`
   );
   return {
     ...reply,
@@ -713,6 +753,9 @@ export function updateCompanion(companion, updates = {}) {
     name: String(updates.name ?? companion.name).trim() || companion.name,
     relationshipType: updates.relationshipType ?? companion.relationshipType,
     personality: updates.personality ?? companion.personality,
+    language: Object.hasOwn(updates, 'language')
+      ? normalizeLanguage(updates.language)
+      : normalizeLanguage(companion.language),
     avatarStyle: updates.avatarStyle ?? companion.avatarStyle,
     avatarColor: updates.avatarColor ?? companion.avatarColor,
     pushCategories: nextCategories,
@@ -811,6 +854,14 @@ function shouldRunCareCheckIn(companion, now) {
   if (frequency === 'rarely') return false;
   if (frequency === 'daily') return true;
   return now.getDate() % 2 === 0;
+}
+
+export function companionsDueForPush(state, options = {}) {
+  const now = options.now ? new Date(options.now) : new Date();
+  return state.companions.filter((companion) => {
+    if (!scheduleHasArrived(companion, now)) return false;
+    return countDailyPushes(state.messages, companion.id, now) < companion.pushSchedule.maxDaily;
+  });
 }
 
 export function runScheduledDailyPushes(state, options = {}) {
@@ -965,6 +1016,7 @@ export function deserializeState(raw) {
       user: parsed.user ? updateUserProfile(DEFAULT_USER, parsed.user) : { ...DEFAULT_USER },
       companions: parsed.companions.map((companion) => ({
         ...companion,
+        language: normalizeLanguage(companion.language),
         customKeywords: companion.customKeywords || [],
         contentSources: {
           enabledProviders: normalizeProviders(companion.contentSources?.enabledProviders)
@@ -978,4 +1030,4 @@ export function deserializeState(raw) {
   }
 }
 
-export { CATEGORY_LIBRARY, MOCK_CONTENT_SOURCES };
+export { CATEGORY_LIBRARY, LANGUAGE_LIBRARY, MOCK_CONTENT_SOURCES };

@@ -1,22 +1,25 @@
 {
   "name": "english-companions",
   "version": "0.1.0",
-  "description": "A local-first web app for creating multiple English companion agents with chat, lightweight memory, emotional support, and daily content picks.",
+  "description": "A local-first web app for creating multiple AI language companion agents with chat, per-companion practice language, select-to-translate, a word book, lightweight memory, emotional support, and scheduled daily content picks.",
   "private": true,
   "type": "module",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/3293578/Intelligent-companions.git"
   },
   "keywords": [
+    "language-learning",
     "english-learning",
     "ai-companion",
     "agent",
+    "translation",
     "daily-content",
     "local-first"
   ],
   "scripts": {
-    "test": "node --test tests/companionLogic.test.mjs tests/contentAdapters.test.mjs tests/contentProxy.test.mjs tests/chatProxy.test.mjs tests/modelConfig.test.mjs tests/nodeProxyFetch.test.mjs tests/openaiClient.test.mjs tests/chatUiState.test.mjs tests/layoutCss.test.mjs tests/memoryStore.test.mjs tests/memoryProxy.test.mjs",
+    "test": "node --test tests/*.test.mjs",
     "dev": "node server.mjs"
   }
 }
