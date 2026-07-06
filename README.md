@@ -1,6 +1,6 @@
-# English Companions
+# Language Companions
 
-English Companions is a local-first web app for creating multiple AI companion agents for daily language conversation, emotional support, and personalized content discovery. It ships with English by default and each companion can be set to a different practice language.
+language Companions is a local-first web app for creating multiple AI companion agents for daily language conversation, emotional support, and personalized content discovery. It ships with English by default and each companion can be set to a different practice language.
 
 The product idea is not to roleplay inside a chatbot shell. It is an actual companion app: users can create different language companions, give each one a relationship style and care profile, chat with them day to day, and let them proactively share interesting videos, news, jokes, learning resources, or custom topics.
 
