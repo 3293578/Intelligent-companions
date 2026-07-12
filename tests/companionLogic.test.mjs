@@ -109,6 +109,34 @@ test('creates a companion with English practice style settings', () => {
   });
 });
 
+test('companions receive a Wyth scene and default avatar without proactive correction', () => {
+  const companion = createCompanion({ name: 'Mia', relationshipType: 'Tree hole' });
+
+  assert.equal(companion.sceneId, 'listener_rain');
+  assert.deepEqual(companion.avatar, { kind: 'default', dataUrl: '', mimeType: '' });
+  assert.equal(companion.practiceStyle.correctionMode, 'off');
+});
+
+test('deserializes old companions with deterministic Wyth visual fields', () => {
+  const restored = deserializeState(JSON.stringify({
+    selectedCompanionId: 'old',
+    companions: [{ id: 'old', name: 'Old friend', relationshipType: 'Bestie', personality: 'Warm' }],
+    messages: []
+  }));
+
+  assert.equal(restored.companions[0].sceneId, 'friend_room');
+  assert.deepEqual(restored.companions[0].avatar, { kind: 'default', dataUrl: '', mimeType: '' });
+});
+
+test('preserves a custom avatar when unrelated companion details change', () => {
+  const companion = createCompanion({
+    name: 'Mia',
+    avatar: { kind: 'custom', dataUrl: 'data:image/webp;base64,abc', mimeType: 'image/webp' }
+  });
+
+  assert.equal(updateCompanion(companion, { personality: 'Calm' }).avatar.kind, 'custom');
+});
+
 test('builds a provider retrieval plan from categories and custom keywords', () => {
   const companion = createCompanion({
     name: 'Luna',

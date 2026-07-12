@@ -1,3 +1,5 @@
+import { recommendSceneId, sceneForId } from './sceneCatalog.js';
+
 const DEFAULT_CATEGORIES = ['funny_videos', 'world_news', 'tech_news'];
 const DEFAULT_CONTENT_PROVIDERS = ['youtube', 'news', 'reddit', 'web_search'];
 
@@ -218,7 +220,7 @@ const DEFAULT_CARE_STYLE = {
 };
 
 const DEFAULT_PRACTICE_STYLE = {
-  correctionMode: 'after_reply',
+  correctionMode: 'off',
   correctionIntensity: 'light',
   replyLength: 'medium',
   naturalPhrases: true
@@ -335,6 +337,17 @@ function normalizePracticeStyle(input = {}) {
   };
 }
 
+function normalizeAvatar(input = {}) {
+  if (input?.kind === 'custom' && /^data:image\/(?:webp|png|jpeg);base64,/.test(input.dataUrl || '')) {
+    return {
+      kind: 'custom',
+      dataUrl: input.dataUrl,
+      mimeType: input.mimeType || 'image/webp'
+    };
+  }
+  return { kind: 'default', dataUrl: '', mimeType: '' };
+}
+
 export function createCompanion(input = {}) {
   const name = String(input.name || 'Luna').trim() || 'Luna';
   const categories = normalizeCategories(input.pushCategories);
@@ -347,6 +360,8 @@ export function createCompanion(input = {}) {
     language: normalizeLanguage(input.language),
     avatarStyle: input.avatarStyle || 'Soft portrait',
     avatarColor: input.avatarColor || AVATAR_COLORS[name.length % AVATAR_COLORS.length],
+    sceneId: sceneForId(input.sceneId || recommendSceneId(input)).id,
+    avatar: normalizeAvatar(input.avatar),
     pushCategories: categories,
     customKeywords: normalizeKeywords(input.customKeywords),
     contentSources: {
@@ -758,6 +773,13 @@ export function updateCompanion(companion, updates = {}) {
       : normalizeLanguage(companion.language),
     avatarStyle: updates.avatarStyle ?? companion.avatarStyle,
     avatarColor: updates.avatarColor ?? companion.avatarColor,
+    sceneId: sceneForId(updates.sceneId ?? companion.sceneId ?? recommendSceneId({
+      relationshipType: updates.relationshipType ?? companion.relationshipType,
+      personality: updates.personality ?? companion.personality
+    })).id,
+    avatar: Object.hasOwn(updates, 'avatar')
+      ? normalizeAvatar(updates.avatar)
+      : normalizeAvatar(companion.avatar),
     pushCategories: nextCategories,
     customKeywords: Object.prototype.hasOwnProperty.call(updates, 'customKeywords')
       ? normalizeKeywords(updates.customKeywords)
@@ -1017,6 +1039,8 @@ export function deserializeState(raw) {
       companions: parsed.companions.map((companion) => ({
         ...companion,
         language: normalizeLanguage(companion.language),
+        sceneId: sceneForId(companion.sceneId || recommendSceneId(companion)).id,
+        avatar: normalizeAvatar(companion.avatar),
         customKeywords: companion.customKeywords || [],
         contentSources: {
           enabledProviders: normalizeProviders(companion.contentSources?.enabledProviders)
