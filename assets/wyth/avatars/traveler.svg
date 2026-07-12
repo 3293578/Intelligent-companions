@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Train window mark">
+  <circle cx="32" cy="32" r="30" fill="#263236" stroke="#d4b47b" stroke-width="2"/>
+  <rect x="15" y="15" width="34" height="34" rx="9" fill="none" stroke="#d4b47b" stroke-width="2.5"/>
+  <path d="M19 39c7-8 13-4 18-10 3 4 6 4 8 10M19 43h26" fill="none" stroke="#8da7ad" stroke-width="2" stroke-linecap="round"/>
+  <circle cx="39" cy="28" r="3" fill="#d4b47b"/>
+</svg>
