@@ -8,6 +8,8 @@ import {
   validateCreationStep,
   canSubmitCreation,
   selectVisualStyle,
+  beginAvatarRequest,
+  acceptsAvatarRequest,
   updateCreationDraft
 } from '../src/creationFlowState.js';
 
@@ -26,6 +28,16 @@ test('creation flow starts in quick identity mode with safe commercial defaults'
   assert.equal(flow.draft.visualStyle, 'cinematic_semireal');
   assert.equal(flow.draft.voiceId, '');
   assert.equal(flow.draft.backgroundStory, '');
+});
+
+test('avatar request tokens accept only the newest request in the same open session', () => {
+  const first = beginAvatarRequest({ session: 4, token: 8 });
+  const second = beginAvatarRequest(first);
+
+  assert.deepEqual(first, { session: 4, token: 9 });
+  assert.equal(acceptsAvatarRequest(first, second), false);
+  assert.equal(acceptsAvatarRequest(second, second), true);
+  assert.equal(acceptsAvatarRequest(second, { session: 5, token: 10 }), false);
 });
 
 test('visual style changes only when an enabled option is explicitly selected', () => {

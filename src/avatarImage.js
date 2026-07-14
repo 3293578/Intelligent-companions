@@ -17,18 +17,24 @@ export async function processAvatarFile(file, env = globalThis) {
   const validation = validateAvatarFile(file);
   if (!validation.ok) throw new Error(validation.error);
 
-  const source = await new Promise((resolve, reject) => {
-    const image = new env.Image();
-    image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error('Could not read that image.'));
-    image.src = env.URL.createObjectURL(file);
-  });
-  const crop = avatarCrop(source.naturalWidth, source.naturalHeight);
-  const canvas = env.document.createElement('canvas');
-  canvas.width = OUTPUT_SIZE;
-  canvas.height = OUTPUT_SIZE;
-  canvas.getContext('2d').drawImage(source, crop.sx, crop.sy, crop.size, crop.size, 0, 0, OUTPUT_SIZE, OUTPUT_SIZE);
-  env.URL.revokeObjectURL(source.src);
+  const objectUrl = env.URL.createObjectURL(file);
+  let source;
+  let canvas;
+  try {
+    source = await new Promise((resolve, reject) => {
+      const image = new env.Image();
+      image.onload = () => resolve(image);
+      image.onerror = () => reject(new Error('Could not read that image.'));
+      image.src = objectUrl;
+    });
+    const crop = avatarCrop(source.naturalWidth, source.naturalHeight);
+    canvas = env.document.createElement('canvas');
+    canvas.width = OUTPUT_SIZE;
+    canvas.height = OUTPUT_SIZE;
+    canvas.getContext('2d').drawImage(source, crop.sx, crop.sy, crop.size, crop.size, 0, 0, OUTPUT_SIZE, OUTPUT_SIZE);
+  } finally {
+    env.URL.revokeObjectURL(objectUrl);
+  }
 
   return new Promise((resolve, reject) => {
     canvas.toBlob((blob) => {

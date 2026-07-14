@@ -96,3 +96,11 @@ export function canSubmitCreation(flow) {
 export function selectVisualStyle(currentStyle, explicitlySelectedStyle) {
   return VISUAL_STYLES.has(explicitlySelectedStyle) ? explicitlySelectedStyle : currentStyle;
 }
+
+export function beginAvatarRequest(state = { session: 0, token: 0 }) {
+  return { session: state.session, token: state.token + 1 };
+}
+
+export function acceptsAvatarRequest(request, current) {
+  return request.session === current.session && request.token === current.token;
+}
