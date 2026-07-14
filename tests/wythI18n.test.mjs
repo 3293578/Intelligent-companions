@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   DEFAULT_LOCALE,
   WYTH_LOCALES,
+  lookupCatalogString,
   normalizeLocale,
   t,
   validateCatalogParity
@@ -52,6 +53,67 @@ test('catalog covers every current and planned user-facing surface', () => {
   }
 });
 
+test('catalog covers every current creation enum, provider, language, and Daily Pick category', () => {
+  const requiredEnumKeys = [
+    'enum.relationship.girlfriend',
+    'enum.relationship.boyfriend',
+    'enum.relationship.bestie',
+    'enum.relationship.mentor',
+    'enum.relationship.treeHole',
+    'enum.relationship.knowledgeBrother',
+    'enum.intimacy.gentle',
+    'enum.intimacy.close',
+    'enum.intimacy.deep',
+    'enum.support.listenFirst',
+    'enum.support.gentleAdvice',
+    'enum.support.cheerUp',
+    'enum.proactiveCare.rarely',
+    'enum.proactiveCare.sometimes',
+    'enum.proactiveCare.daily',
+    'enum.correctionMode.off',
+    'enum.correctionMode.gentleInline',
+    'enum.correctionMode.afterReply',
+    'enum.correctionIntensity.light',
+    'enum.correctionIntensity.balanced',
+    'enum.correctionIntensity.detailed',
+    'enum.replyLength.short',
+    'enum.replyLength.medium',
+    'enum.replyLength.long',
+    'enum.avatarStyle.softAnime',
+    'enum.avatarStyle.cleanRealistic',
+    'enum.avatarStyle.minimalIllustrated',
+    'enum.avatarStyle.dreamyEditorial',
+    'enum.practiceLanguage.english',
+    'enum.practiceLanguage.japanese',
+    'enum.practiceLanguage.korean',
+    'enum.practiceLanguage.french',
+    'enum.practiceLanguage.spanish',
+    'enum.practiceLanguage.german',
+    'enum.practiceLanguage.italian',
+    'enum.provider.youtube',
+    'enum.provider.news',
+    'enum.provider.reddit',
+    'enum.provider.webSearch',
+    'enum.category.funnyVideos',
+    'enum.category.worldNews',
+    'enum.category.techNews',
+    'enum.category.psychology',
+    'enum.category.healingNews',
+    'enum.category.music',
+    'enum.category.deepReads',
+    'enum.category.localEvents',
+    'enum.category.dailyJokes',
+    'enum.category.internetMemes'
+  ];
+
+  for (const key of requiredEnumKeys) {
+    for (const locale of ['zh-CN', 'en']) {
+      assert.equal(typeof WYTH_LOCALES[locale].strings[key], 'string', `missing ${locale} enum key: ${key}`);
+      assert.ok(WYTH_LOCALES[locale].strings[key].length > 0, `empty ${locale} enum key: ${key}`);
+    }
+  }
+});
+
 test('normalizes supported locale families and defaults unknown locales to Chinese', () => {
   assert.equal(DEFAULT_LOCALE, 'zh-CN');
   assert.equal(normalizeLocale('zh'), 'zh-CN');
@@ -67,6 +129,22 @@ test('looks up strings, falls back safely, and exposes document metadata', () =>
   assert.equal(t('en', 'settings.language'), 'Interface language');
   assert.equal(WYTH_LOCALES.en.meta.htmlLang, 'en');
   assert.equal(WYTH_LOCALES['zh-CN'].meta.htmlLang, 'zh-CN');
+});
+
+test('falls back to English before returning the key when a locale catalog is incomplete', () => {
+  const partialCatalogs = {
+    'zh-CN': { strings: { 'only.chinese': '仅中文' } },
+    en: { strings: { 'english.fallback': 'English fallback' } }
+  };
+
+  assert.equal(
+    lookupCatalogString(partialCatalogs, 'zh-CN', 'english.fallback'),
+    'English fallback'
+  );
+  assert.equal(
+    lookupCatalogString(partialCatalogs, 'zh-CN', 'missing.everywhere'),
+    'missing.everywhere'
+  );
 });
 
 test('interpolates values without rewriting user content or unresolved placeholders', () => {

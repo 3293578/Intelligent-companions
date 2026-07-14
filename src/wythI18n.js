@@ -147,6 +147,56 @@ const CATALOG_ENTRIES = Object.freeze([
   ['creation.delete', '删除角色', 'Delete companion'],
   ['creation.deleteConfirm', '确定删除 {name} 吗？聊天记录也会被删除。', 'Delete {name}? Their chat history will also be removed.'],
 
+  ['enum.relationship.girlfriend', '女朋友', 'Girlfriend'],
+  ['enum.relationship.boyfriend', '男朋友', 'Boyfriend'],
+  ['enum.relationship.bestie', '知心好友', 'Bestie'],
+  ['enum.relationship.mentor', '导师', 'Mentor'],
+  ['enum.relationship.treeHole', '树洞倾听者', 'Tree hole'],
+  ['enum.relationship.knowledgeBrother', '知识型哥哥', 'Knowledge brother'],
+  ['enum.intimacy.gentle', '温和', 'Gentle'],
+  ['enum.intimacy.close', '亲近', 'Close'],
+  ['enum.intimacy.deep', '深入', 'Deep'],
+  ['enum.support.listenFirst', '先倾听', 'Listen first'],
+  ['enum.support.gentleAdvice', '温柔建议', 'Gentle advice'],
+  ['enum.support.cheerUp', '陪你振作', 'Cheer up'],
+  ['enum.proactiveCare.rarely', '偶尔', 'Rarely'],
+  ['enum.proactiveCare.sometimes', '有时', 'Sometimes'],
+  ['enum.proactiveCare.daily', '每天', 'Daily'],
+  ['enum.correctionMode.off', '关闭', 'Off'],
+  ['enum.correctionMode.gentleInline', '轻柔穿插', 'Gentle inline'],
+  ['enum.correctionMode.afterReply', '回复后提示', 'After reply'],
+  ['enum.correctionIntensity.light', '轻量', 'Light'],
+  ['enum.correctionIntensity.balanced', '均衡', 'Balanced'],
+  ['enum.correctionIntensity.detailed', '详细', 'Detailed'],
+  ['enum.replyLength.short', '简短', 'Short'],
+  ['enum.replyLength.medium', '适中', 'Medium'],
+  ['enum.replyLength.long', '较长', 'Long'],
+  ['enum.avatarStyle.softAnime', '柔和动漫肖像', 'Soft anime portrait'],
+  ['enum.avatarStyle.cleanRealistic', '清透写实肖像', 'Clean realistic portrait'],
+  ['enum.avatarStyle.minimalIllustrated', '极简插画肖像', 'Minimal illustrated portrait'],
+  ['enum.avatarStyle.dreamyEditorial', '梦幻杂志肖像', 'Dreamy editorial portrait'],
+  ['enum.practiceLanguage.english', '英语 English', 'English'],
+  ['enum.practiceLanguage.japanese', '日语 日本語', 'Japanese 日本語'],
+  ['enum.practiceLanguage.korean', '韩语 한국어', 'Korean 한국어'],
+  ['enum.practiceLanguage.french', '法语 Français', 'French Français'],
+  ['enum.practiceLanguage.spanish', '西班牙语 Español', 'Spanish Español'],
+  ['enum.practiceLanguage.german', '德语 Deutsch', 'German Deutsch'],
+  ['enum.practiceLanguage.italian', '意大利语 Italiano', 'Italian Italiano'],
+  ['enum.provider.youtube', 'YouTube 视频', 'YouTube videos'],
+  ['enum.provider.news', '新闻 API', 'News APIs'],
+  ['enum.provider.reddit', 'Reddit 热门内容', 'Reddit trends'],
+  ['enum.provider.webSearch', '网页搜索', 'Web search'],
+  ['enum.category.funnyVideos', '搞笑视频', 'Funny video'],
+  ['enum.category.worldNews', '国际新闻', 'World news'],
+  ['enum.category.techNews', '科技新闻', 'Tech news'],
+  ['enum.category.psychology', '心理学', 'Psychology'],
+  ['enum.category.healingNews', '治愈新闻', 'Healing news'],
+  ['enum.category.music', '音乐', 'Music'],
+  ['enum.category.deepReads', '深度阅读', 'Deep read'],
+  ['enum.category.localEvents', '本地活动', 'Local events'],
+  ['enum.category.dailyJokes', '每日笑话', 'Daily joke'],
+  ['enum.category.internetMemes', '网络梗图', 'Internet meme'],
+
   ['avatar.title', '角色头像', 'Companion avatar'],
   ['avatar.upload', '上传头像', 'Upload avatar'],
   ['avatar.change', '更换头像', 'Change avatar'],
@@ -442,12 +492,16 @@ export function normalizeLocale(value) {
   return DEFAULT_LOCALE;
 }
 
-export function t(locale, key, values = {}) {
+export function lookupCatalogString(catalogSet, locale, key) {
   const normalized = normalizeLocale(locale);
   const lookupKey = String(key ?? '');
-  const template = catalogs[normalized].strings[lookupKey]
-    ?? catalogs.en.strings[lookupKey]
+  return catalogSet?.[normalized]?.strings?.[lookupKey]
+    ?? catalogSet?.en?.strings?.[lookupKey]
     ?? lookupKey;
+}
+
+export function t(locale, key, values = {}) {
+  const template = lookupCatalogString(catalogs, locale, key);
 
   return template.replace(/\{(\w+)\}/g, (placeholder, name) => (
     Object.prototype.hasOwnProperty.call(values, name) ? String(values[name]) : placeholder
