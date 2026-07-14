@@ -642,10 +642,18 @@ export function lookupCatalogString(catalogSet, locale, key) {
   const lookupKey = String(key ?? '');
   const localizedStrings = catalogSet?.[normalized]?.strings;
   const englishStrings = catalogSet?.en?.strings;
-  if (localizedStrings && Object.prototype.hasOwnProperty.call(localizedStrings, lookupKey)) {
+  if (
+    localizedStrings
+    && Object.prototype.hasOwnProperty.call(localizedStrings, lookupKey)
+    && typeof localizedStrings[lookupKey] === 'string'
+  ) {
     return localizedStrings[lookupKey];
   }
-  if (englishStrings && Object.prototype.hasOwnProperty.call(englishStrings, lookupKey)) {
+  if (
+    englishStrings
+    && Object.prototype.hasOwnProperty.call(englishStrings, lookupKey)
+    && typeof englishStrings[lookupKey] === 'string'
+  ) {
     return englishStrings[lookupKey];
   }
   return lookupKey;

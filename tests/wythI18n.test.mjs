@@ -223,6 +223,17 @@ test('catalog lookup ignores properties inherited from Object.prototype', () => 
   assert.equal(t('en', 'toString'), 'toString');
 });
 
+test('catalog lookup ignores non-string own values before falling back', () => {
+  const malformedCatalogs = {
+    'zh-CN': { strings: { fallback: null, invalid: { text: 'not a string' } } },
+    en: { strings: { fallback: 'English fallback', invalid: 42 } }
+  };
+
+  assert.equal(lookupCatalogString(malformedCatalogs, 'zh-CN', 'fallback'), 'English fallback');
+  assert.equal(lookupCatalogString(malformedCatalogs, 'zh-CN', 'invalid'), 'invalid');
+  assert.doesNotThrow(() => t('en', 'chat.replying', null));
+});
+
 test('looks up strings, falls back safely, and exposes document metadata', () => {
   assert.equal(t('zh-CN', 'missing.key'), 'missing.key');
   assert.equal(t('en', 'settings.language'), 'Interface language');
