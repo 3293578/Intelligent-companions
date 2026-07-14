@@ -12,7 +12,7 @@ import {
   updateProgressiveProfile
 } from '../src/onboardingState.js';
 
-const NOW = '2026-07-14T12:00:00Z';
+const NOW = '2026-07-14';
 
 test('creates a safe versioned onboarding state', () => {
   assert.deepEqual(createOnboardingState(), {
@@ -55,8 +55,21 @@ test('calculates age at birthday boundaries using the explicit date', () => {
   assert.equal(calculateAge('2008-07-14', NOW), 18);
   assert.equal(calculateAge('2008-07-15', NOW), 17);
   assert.equal(calculateAge('2008-07-13', NOW), 18);
-  assert.equal(calculateAge('2008-02-29', '2026-02-28T12:00:00Z'), 17);
-  assert.equal(calculateAge('2008-02-29', '2026-03-01T12:00:00Z'), 18);
+  assert.equal(calculateAge('2008-02-29', '2026-02-28'), 17);
+  assert.equal(calculateAge('2008-02-29', '2026-03-01'), 18);
+});
+
+test('uses the calendar date expressed by extreme timezone offsets', () => {
+  assert.equal(calculateAge('2008-07-15', '2026-07-14T23:30:00-12:00'), 17);
+  assert.equal(calculateAge('2008-07-15', '2026-07-15T00:30:00+14:00'), 18);
+});
+
+test('rejects invalid reference calendar dates instead of accepting rollover', () => {
+  assert.equal(calculateAge('2008-07-15', '2026-02-30'), null);
+  assert.equal(calculateAge('2008-07-15', 'not-a-date'), null);
+  assert.equal(calculateAge('2008-07-15', '2026-07-14Tgarbage'), null);
+  assert.equal(calculateAge('2008-07-15', '2026-07-14T25:00:00+08:00'), null);
+  assert.equal(normalizeBirthday('2008-07-15', '2026-02-30').error, 'invalid_reference_date');
 });
 
 test('saves a minor birthday and cannot opt the minor into romance', () => {
@@ -74,6 +87,44 @@ test('saves an adult birthday and derives romance eligibility', () => {
   assert.equal(state.ageGroup, 'adult');
   assert.equal(state.romanceAllowed, true);
   assert.equal(state.stage, 'companion');
+});
+
+test('cannot create or preserve adult authorization without a verified birthday', () => {
+  const forged = createOnboardingState({
+    ageGroup: 'adult',
+    romanceAllowed: true,
+    stage: 'complete',
+    completed: true
+  });
+  const changedLocale = setInterfaceLocale(forged, 'en');
+  const changedProfile = updateProgressiveProfile(forged, { gender: 'woman' });
+
+  for (const state of [forged, changedLocale, changedProfile]) {
+    assert.equal(state.birthday, '');
+    assert.equal(state.ageGroup, 'unknown');
+    assert.equal(state.romanceAllowed, false);
+  }
+
+  const invalidSave = saveBirthday({
+    ...forged,
+    birthday: '2000-01-01',
+    ageGroup: 'adult',
+    romanceAllowed: true
+  }, '2027-01-01', NOW);
+  assert.equal(invalidSave.ageGroup, 'unknown');
+  assert.equal(invalidSave.romanceAllowed, false);
+});
+
+test('locale and progressive profile edits preserve a verified age state', () => {
+  const adult = saveBirthday(createOnboardingState(), '2000-01-01', NOW);
+  const localized = setInterfaceLocale(adult, 'en');
+  const profiled = updateProgressiveProfile(localized, { gender: 'woman' });
+
+  for (const state of [localized, profiled]) {
+    assert.equal(state.birthday, '2000-01-01');
+    assert.equal(state.ageGroup, 'adult');
+    assert.equal(state.romanceAllowed, true);
+  }
 });
 
 test('rejects an invalid birthday without corrupting the current state', () => {
@@ -201,4 +252,36 @@ test('drops invalid persisted profile and birthday values safely', () => {
   assert.equal(restored.romanceAllowed, false);
   assert.equal(restored.interfaceLocale, 'zh-CN');
   assert.deepEqual(restored.profile, createOnboardingState().profile);
+  assert.equal(restored.stage, 'birthday');
+  assert.equal(restored.completed, false);
+});
+
+test('missing birthday cannot restore later progress or truthy completion values', () => {
+  for (const completed of ['true', 1, {}, true]) {
+    const restored = deserializeOnboardingState(JSON.stringify({
+      stage: 'complete',
+      completed,
+      ageGroup: 'adult',
+      romanceAllowed: true
+    }), NOW);
+
+    assert.equal(restored.stage, 'birthday');
+    assert.equal(restored.completed, false);
+    assert.equal(restored.ageGroup, 'unknown');
+    assert.equal(restored.romanceAllowed, false);
+  }
+});
+
+test('valid birthday restores only whitelisted stage and strict boolean completion', () => {
+  const invalidStage = deserializeOnboardingState(JSON.stringify({
+    birthday: '2000-01-01', stage: 'admin', completed: true
+  }), NOW);
+  const stringCompletion = deserializeOnboardingState(JSON.stringify({
+    birthday: '2000-01-01', stage: 'profile', completed: 'true'
+  }), NOW);
+
+  assert.equal(invalidStage.stage, 'companion');
+  assert.equal(invalidStage.completed, true);
+  assert.equal(stringCompletion.stage, 'profile');
+  assert.equal(stringCompletion.completed, false);
 });

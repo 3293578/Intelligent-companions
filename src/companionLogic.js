@@ -220,6 +220,32 @@ const DEFAULT_USER = {
   createdAt: '2026-07-03T00:00:00.000Z'
 };
 
+function localCalendarDate(now = new Date()) {
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function cloneDefaultUser() {
+  return { ...DEFAULT_USER, privacy: { ...DEFAULT_USER.privacy } };
+}
+
+function normalizePrivacy(current, updates) {
+  const merged = { ...current, ...updates };
+  return {
+    localOnly: typeof merged.localOnly === 'boolean'
+      ? merged.localOnly
+      : DEFAULT_USER.privacy.localOnly,
+    allowAiTraining: typeof merged.allowAiTraining === 'boolean'
+      ? merged.allowAiTraining
+      : DEFAULT_USER.privacy.allowAiTraining,
+    showPrivacyNotice: typeof merged.showPrivacyNotice === 'boolean'
+      ? merged.showPrivacyNotice
+      : DEFAULT_USER.privacy.showPrivacyNotice
+  };
+}
+
 const DEFAULT_CARE_STYLE = {
   intimacyLevel: 'gentle',
   supportMode: 'listen_first',
@@ -956,7 +982,7 @@ export function generateCompanionPreview(input = {}) {
   };
 }
 
-export function updateUserProfile(user, updates = {}, now = new Date().toISOString()) {
+export function updateUserProfile(user, updates = {}, now = localCalendarDate()) {
   const currentBirthday = String(user.birthday ?? '');
   const requestedBirthday = String(updates.birthday ?? currentBirthday);
   const normalizedBirthday = requestedBirthday
@@ -967,6 +993,7 @@ export function updateUserProfile(user, updates = {}, now = new Date().toISOStri
   const age = verifiedBirthday?.ok ? calculateAge(birthday, now) : null;
   const updated = {
     ...user,
+    ...updates,
     displayName: String(updates.displayName ?? user.displayName).trim() || user.displayName,
     email: String(updates.email ?? user.email).trim() || user.email,
     birthday: verifiedBirthday?.ok ? birthday : '',
@@ -980,11 +1007,7 @@ export function updateUserProfile(user, updates = {}, now = new Date().toISOStri
       ? updates.preferredCompanionGender
       : user.preferredCompanionGender || '',
     interfaceLocale: normalizeLocale(updates.interfaceLocale ?? user.interfaceLocale),
-    privacy: {
-      ...DEFAULT_USER.privacy,
-      ...user.privacy,
-      ...(updates.privacy || {})
-    }
+    privacy: normalizePrivacy(user.privacy, updates.privacy)
   };
   delete updated.romanceAllowed;
   return updated;
@@ -1029,7 +1052,7 @@ export function createSeedState() {
   });
 
   return {
-    user: { ...DEFAULT_USER },
+    user: cloneDefaultUser(),
     selectedCompanionId: luna.id,
     companions: [luna, alex],
     messages: [
@@ -1056,7 +1079,7 @@ export function serializeState(state) {
   return JSON.stringify(state);
 }
 
-export function deserializeState(raw, now = new Date().toISOString()) {
+export function deserializeState(raw, now = localCalendarDate()) {
   try {
     const parsed = JSON.parse(raw);
     if (!parsed || !Array.isArray(parsed.companions) || !Array.isArray(parsed.messages)) {
@@ -1064,7 +1087,7 @@ export function deserializeState(raw, now = new Date().toISOString()) {
     }
     return {
       ...parsed,
-      user: parsed.user ? updateUserProfile(DEFAULT_USER, parsed.user, now) : { ...DEFAULT_USER },
+      user: parsed.user ? updateUserProfile(cloneDefaultUser(), parsed.user, now) : cloneDefaultUser(),
       companions: parsed.companions.map((companion) => ({
         ...companion,
         language: normalizeLanguage(companion.language),

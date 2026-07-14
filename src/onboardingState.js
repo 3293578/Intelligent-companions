@@ -5,6 +5,7 @@ export const ONBOARDING_VERSION = 1;
 const GENDERS = new Set(['woman', 'man', 'non_binary', 'prefer_not_to_say', '']);
 const COMPANION_GENDERS = new Set(['man', 'woman', 'neutral', 'not_sure', '']);
 const STAGES = new Set(['language', 'birthday', 'companion', 'profile', 'complete']);
+const VERIFIED_STATE = Symbol('verifiedOnboardingAge');
 
 function normalizeEnum(value, allowed, fallback = '') {
   return allowed.has(value) ? value : fallback;
@@ -12,11 +13,6 @@ function normalizeEnum(value, allowed, fallback = '') {
 
 function normalizeProactiveContact(value, fallback = null) {
   return value === true || value === false || value === null ? value : fallback;
-}
-
-function parseReferenceDate(now) {
-  const reference = new Date(now);
-  return Number.isNaN(reference.getTime()) ? null : reference;
 }
 
 function isRealIsoDate(value) {
@@ -28,19 +24,28 @@ function isRealIsoDate(value) {
     && date.getUTCDate() === day;
 }
 
-export function createOnboardingState(input = {}) {
-  const ageGroup = input.ageGroup === 'adult' || input.ageGroup === 'minor'
-    ? input.ageGroup
-    : 'unknown';
-  const profile = input.profile || {};
+function parseCalendarDate(value) {
+  const match = String(value ?? '').match(
+    /^(\d{4}-\d{2}-\d{2})(?:T(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d))?$/
+  );
+  if (!match || !isRealIsoDate(match[1])) return null;
+  const [year, month, day] = match[1].split('-').map(Number);
+  return { year, month, day };
+}
 
-  return {
+export function createOnboardingState(input = {}) {
+  const profile = input.profile || {};
+  const verified = input?.[VERIFIED_STATE] === true
+    && isRealIsoDate(String(input.birthday ?? ''))
+    && (input.ageGroup === 'adult' || input.ageGroup === 'minor');
+
+  const state = {
     version: ONBOARDING_VERSION,
     stage: STAGES.has(input.stage) ? input.stage : 'language',
     interfaceLocale: normalizeLocale(input.interfaceLocale),
-    birthday: typeof input.birthday === 'string' ? input.birthday : '',
-    ageGroup,
-    romanceAllowed: ageGroup === 'adult',
+    birthday: verified ? input.birthday : '',
+    ageGroup: verified ? input.ageGroup : 'unknown',
+    romanceAllowed: verified && input.ageGroup === 'adult',
     profile: {
       gender: normalizeEnum(profile.gender, GENDERS),
       preferredCompanionGender: normalizeEnum(
@@ -49,19 +54,21 @@ export function createOnboardingState(input = {}) {
       ),
       proactiveContact: normalizeProactiveContact(profile.proactiveContact)
     },
-    completed: Boolean(input.completed)
+    completed: input.completed === true
   };
+  if (verified) Object.defineProperty(state, VERIFIED_STATE, { value: true, enumerable: true });
+  return state;
 }
 
 export function calculateAge(birthday, now) {
   if (!isRealIsoDate(String(birthday ?? ''))) return null;
-  const reference = parseReferenceDate(now);
+  const reference = parseCalendarDate(now);
   if (!reference) return null;
 
   const [year, month, day] = birthday.split('-').map(Number);
-  let age = reference.getUTCFullYear() - year;
-  const currentMonth = reference.getUTCMonth() + 1;
-  const currentDay = reference.getUTCDate();
+  let age = reference.year - year;
+  const currentMonth = reference.month;
+  const currentDay = reference.day;
   if (currentMonth < month || (currentMonth === month && currentDay < day)) age -= 1;
   return age;
 }
@@ -87,19 +94,22 @@ export function normalizeBirthday(value, now) {
 
 export function saveBirthday(state, birthday, now) {
   const normalized = normalizeBirthday(birthday, now);
-  if (!normalized.ok) return state;
+  if (!normalized.ok) return createOnboardingState(state);
 
   const age = calculateAge(normalized.value, now);
   const ageGroup = age >= 18 ? 'adult' : 'minor';
-  return {
-    ...createOnboardingState(state),
+  const current = createOnboardingState(state);
+  const saved = {
+    ...current,
     birthday: normalized.value,
     ageGroup,
     romanceAllowed: ageGroup === 'adult',
-    stage: state.stage === 'language' || state.stage === 'birthday'
+    stage: current.stage === 'language' || current.stage === 'birthday'
       ? 'companion'
-      : createOnboardingState(state).stage
+      : current.stage
   };
+  Object.defineProperty(saved, VERIFIED_STATE, { value: true, enumerable: true });
+  return saved;
 }
 
 export function setInterfaceLocale(state, locale) {
@@ -144,8 +154,9 @@ export function deserializeOnboardingState(raw, now) {
     const profile = parsed.profile && typeof parsed.profile === 'object'
       ? parsed.profile
       : {};
+    const persistedStage = STAGES.has(parsed.stage) ? parsed.stage : 'companion';
     let state = createOnboardingState({
-      stage: parsed.stage,
+      stage: persistedStage,
       interfaceLocale: parsed.interfaceLocale ?? parsed.locale,
       profile: {
         gender: profile.gender ?? parsed.gender,
@@ -153,11 +164,23 @@ export function deserializeOnboardingState(raw, now) {
           profile.preferredCompanionGender ?? parsed.preferredGender,
         proactiveContact: profile.proactiveContact ?? parsed.proactiveContact ?? null
       },
-      completed: parsed.completed
+      completed: parsed.completed === true
     });
 
     const birthday = parsed.birthday ?? parsed.birthDate;
-    if (birthday) state = saveBirthday(state, birthday, now);
+    const normalizedBirthday = normalizeBirthday(birthday, now);
+    if (!normalizedBirthday.ok) {
+      return {
+        ...state,
+        stage: 'birthday',
+        birthday: '',
+        ageGroup: 'unknown',
+        romanceAllowed: false,
+        completed: false
+      };
+    }
+
+    state = saveBirthday(state, normalizedBirthday.value, now);
     if (STAGES.has(parsed.stage)) state = { ...state, stage: parsed.stage };
     return state;
   } catch {

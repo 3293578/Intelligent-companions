@@ -400,6 +400,18 @@ test('deserializes older local state by adding a default user profile', () => {
   assert.equal('romanceAllowed' in restored.user, false);
 });
 
+test('state factories deep clone nested user privacy', () => {
+  const seedA = createSeedState();
+  const seedB = createSeedState();
+  const missingUser = deserializeState(JSON.stringify({ companions: [], messages: [] }));
+
+  assert.notEqual(seedA.user.privacy, seedB.user.privacy);
+  assert.notEqual(seedA.user.privacy, missingUser.user.privacy);
+  seedA.user.privacy.localOnly = false;
+  assert.equal(seedB.user.privacy.localOnly, true);
+  assert.equal(missingUser.user.privacy.localOnly, true);
+});
+
 test('updates companion profile and push preferences without losing identity', () => {
   const companion = createCompanion({
     id: 'companion_mia',
@@ -899,7 +911,7 @@ test('updates onboarding profile fields while preserving privacy and deriving ag
     interfaceLocale: 'en-US',
     privacy: { showPrivacyNotice: false },
     romanceAllowed: true
-  }, '2026-07-14T12:00:00Z');
+  }, '2026-07-14');
 
   assert.equal(updated.birthday, '2008-07-15');
   assert.equal(updated.ageGroup, 'minor');
@@ -924,13 +936,45 @@ test('deserializeState re-derives age and rejects persisted romance authorizatio
     }
   };
 
-  const restored = deserializeState(JSON.stringify(oldState), '2026-07-14T12:00:00Z');
+  const restored = deserializeState(JSON.stringify(oldState), '2026-07-14');
 
   assert.equal(restored.user.ageGroup, 'minor');
   assert.equal('romanceAllowed' in restored.user, false);
   assert.equal(restored.user.privacy.localOnly, false);
   assert.equal(restored.user.privacy.allowAiTraining, true);
   assert.equal(restored.user.privacy.showPrivacyNotice, false);
+});
+
+test('user migration normalizes privacy booleans and preserves identity metadata', () => {
+  const restored = deserializeState(JSON.stringify({
+    selectedCompanionId: '',
+    companions: [],
+    messages: [],
+    user: {
+      id: 'user_42',
+      displayName: 'Mira',
+      email: 'mira@example.com',
+      createdAt: '2024-01-02T03:04:05.000Z',
+      lastSeenAt: '2026-07-13T09:00:00.000Z',
+      birthday: '2000-01-01',
+      privacy: {
+        localOnly: 'false',
+        allowAiTraining: 1,
+        showPrivacyNotice: null
+      }
+    }
+  }), '2026-07-14');
+
+  assert.equal(restored.user.id, 'user_42');
+  assert.equal(restored.user.createdAt, '2024-01-02T03:04:05.000Z');
+  assert.equal(restored.user.lastSeenAt, '2026-07-13T09:00:00.000Z');
+  assert.equal(restored.user.displayName, 'Mira');
+  assert.equal(restored.user.ageGroup, 'adult');
+  assert.deepEqual(restored.user.privacy, {
+    localOnly: true,
+    allowAiTraining: false,
+    showPrivacyNotice: true
+  });
 });
 
 test('local fallback replies never leak raw memory template text', () => {
