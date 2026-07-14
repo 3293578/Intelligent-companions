@@ -392,6 +392,12 @@ test('deserializes older local state by adding a default user profile', () => {
 
   assert.equal(restored.user.email, 'local@english-companions.app');
   assert.equal(restored.user.privacy.allowAiTraining, false);
+  assert.equal(restored.user.birthday, '');
+  assert.equal(restored.user.ageGroup, 'unknown');
+  assert.equal(restored.user.gender, '');
+  assert.equal(restored.user.preferredCompanionGender, '');
+  assert.equal(restored.user.interfaceLocale, 'zh-CN');
+  assert.equal('romanceAllowed' in restored.user, false);
 });
 
 test('updates companion profile and push preferences without losing identity', () => {
@@ -881,6 +887,50 @@ test('updates local user profile and privacy settings', () => {
   assert.equal(updated.privacy.localOnly, true);
   assert.equal(updated.privacy.allowAiTraining, false);
   assert.equal(updated.privacy.showPrivacyNotice, false);
+});
+
+test('updates onboarding profile fields while preserving privacy and deriving age', () => {
+  const state = createSeedState();
+
+  const updated = updateUserProfile(state.user, {
+    birthday: '2008-07-15',
+    gender: 'woman',
+    preferredCompanionGender: 'man',
+    interfaceLocale: 'en-US',
+    privacy: { showPrivacyNotice: false },
+    romanceAllowed: true
+  }, '2026-07-14T12:00:00Z');
+
+  assert.equal(updated.birthday, '2008-07-15');
+  assert.equal(updated.ageGroup, 'minor');
+  assert.equal(updated.gender, 'woman');
+  assert.equal(updated.preferredCompanionGender, 'man');
+  assert.equal(updated.interfaceLocale, 'en');
+  assert.equal(updated.privacy.localOnly, true);
+  assert.equal(updated.privacy.showPrivacyNotice, false);
+  assert.equal('romanceAllowed' in updated, false);
+});
+
+test('deserializeState re-derives age and rejects persisted romance authorization', () => {
+  const oldState = {
+    selectedCompanionId: '',
+    companions: [],
+    messages: [],
+    user: {
+      birthday: '2010-01-01',
+      ageGroup: 'adult',
+      romanceAllowed: true,
+      privacy: { localOnly: false, allowAiTraining: true, showPrivacyNotice: false }
+    }
+  };
+
+  const restored = deserializeState(JSON.stringify(oldState), '2026-07-14T12:00:00Z');
+
+  assert.equal(restored.user.ageGroup, 'minor');
+  assert.equal('romanceAllowed' in restored.user, false);
+  assert.equal(restored.user.privacy.localOnly, false);
+  assert.equal(restored.user.privacy.allowAiTraining, true);
+  assert.equal(restored.user.privacy.showPrivacyNotice, false);
 });
 
 test('local fallback replies never leak raw memory template text', () => {

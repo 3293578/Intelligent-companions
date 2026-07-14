@@ -1,4 +1,6 @@
 import { recommendSceneId, sceneForId } from './sceneCatalog.js';
+import { calculateAge, normalizeBirthday } from './onboardingState.js';
+import { normalizeLocale } from './wythI18n.js';
 
 const DEFAULT_CATEGORIES = ['funny_videos', 'world_news', 'tech_news'];
 const DEFAULT_CONTENT_PROVIDERS = ['youtube', 'news', 'reddit', 'web_search'];
@@ -205,6 +207,11 @@ const DEFAULT_USER = {
   id: 'local_user',
   displayName: 'Local user',
   email: 'local@english-companions.app',
+  birthday: '',
+  ageGroup: 'unknown',
+  gender: '',
+  preferredCompanionGender: '',
+  interfaceLocale: 'zh-CN',
   privacy: {
     localOnly: true,
     allowAiTraining: false,
@@ -949,16 +956,38 @@ export function generateCompanionPreview(input = {}) {
   };
 }
 
-export function updateUserProfile(user, updates = {}) {
-  return {
+export function updateUserProfile(user, updates = {}, now = new Date().toISOString()) {
+  const currentBirthday = String(user.birthday ?? '');
+  const requestedBirthday = String(updates.birthday ?? currentBirthday);
+  const normalizedBirthday = requestedBirthday
+    ? normalizeBirthday(requestedBirthday, now)
+    : { ok: true, value: '', error: '' };
+  const birthday = normalizedBirthday.ok ? normalizedBirthday.value : currentBirthday;
+  const verifiedBirthday = birthday ? normalizeBirthday(birthday, now) : null;
+  const age = verifiedBirthday?.ok ? calculateAge(birthday, now) : null;
+  const updated = {
     ...user,
     displayName: String(updates.displayName ?? user.displayName).trim() || user.displayName,
     email: String(updates.email ?? user.email).trim() || user.email,
+    birthday: verifiedBirthday?.ok ? birthday : '',
+    ageGroup: age === null ? 'unknown' : age >= 18 ? 'adult' : 'minor',
+    gender: ['woman', 'man', 'non_binary', 'prefer_not_to_say', ''].includes(updates.gender)
+      ? updates.gender
+      : user.gender || '',
+    preferredCompanionGender: ['man', 'woman', 'neutral', 'not_sure', ''].includes(
+      updates.preferredCompanionGender
+    )
+      ? updates.preferredCompanionGender
+      : user.preferredCompanionGender || '',
+    interfaceLocale: normalizeLocale(updates.interfaceLocale ?? user.interfaceLocale),
     privacy: {
+      ...DEFAULT_USER.privacy,
       ...user.privacy,
       ...(updates.privacy || {})
     }
   };
+  delete updated.romanceAllowed;
+  return updated;
 }
 
 export function updateMemory(companion, userMessage) {
@@ -1027,7 +1056,7 @@ export function serializeState(state) {
   return JSON.stringify(state);
 }
 
-export function deserializeState(raw) {
+export function deserializeState(raw, now = new Date().toISOString()) {
   try {
     const parsed = JSON.parse(raw);
     if (!parsed || !Array.isArray(parsed.companions) || !Array.isArray(parsed.messages)) {
@@ -1035,7 +1064,7 @@ export function deserializeState(raw) {
     }
     return {
       ...parsed,
-      user: parsed.user ? updateUserProfile(DEFAULT_USER, parsed.user) : { ...DEFAULT_USER },
+      user: parsed.user ? updateUserProfile(DEFAULT_USER, parsed.user, now) : { ...DEFAULT_USER },
       companions: parsed.companions.map((companion) => ({
         ...companion,
         language: normalizeLanguage(companion.language),
