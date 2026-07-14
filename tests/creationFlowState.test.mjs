@@ -7,6 +7,7 @@ import {
   goToCreationStep,
   validateCreationStep,
   canSubmitCreation,
+  selectVisualStyle,
   updateCreationDraft
 } from '../src/creationFlowState.js';
 
@@ -25,6 +26,12 @@ test('creation flow starts in quick identity mode with safe commercial defaults'
   assert.equal(flow.draft.visualStyle, 'cinematic_semireal');
   assert.equal(flow.draft.voiceId, '');
   assert.equal(flow.draft.backgroundStory, '');
+});
+
+test('visual style changes only when an enabled option is explicitly selected', () => {
+  assert.equal(selectVisualStyle('digital_human', undefined), 'digital_human');
+  assert.equal(selectVisualStyle('digital_human', 'cinematic_semireal'), 'cinematic_semireal');
+  assert.equal(selectVisualStyle('illustration', 'unknown'), 'illustration');
 });
 
 test('advanced creation validates each step and can submit only from review', () => {

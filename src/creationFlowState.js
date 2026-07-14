@@ -92,3 +92,7 @@ export function validateCreationStep(flow, options = {}) {
 export function canSubmitCreation(flow) {
   return flow.mode === 'quick' || (flow.mode === 'advanced' && flow.step === 'review');
 }
+
+export function selectVisualStyle(currentStyle, explicitlySelectedStyle) {
+  return VISUAL_STYLES.has(explicitlySelectedStyle) ? explicitlySelectedStyle : currentStyle;
+}
