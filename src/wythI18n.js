@@ -275,6 +275,60 @@ const CATALOG_ENTRIES = Object.freeze([
   ['settings.privacy.emergencyContact', '紧急联系人', 'Emergency contact'],
   ['settings.privacy.memoryConsent', '敏感记忆保存前询问我', 'Ask before saving sensitive memories'],
 
+  ['studio.eyebrow', '一个更安静的空间', 'A QUIETER SPACE'],
+  ['studio.introTitle', '让 Wyth 更像属于你的地方。', 'Keep Wyth feeling like yours.'],
+  ['studio.introDescription', '陪伴留在眼前，其他功能安静地待在这里。', 'Companionship stays in front. Everything else waits here.'],
+  ['studio.companionTitle', '{name} 的空间', '{name}\'s studio'],
+  ['studio.companionDescription', '调整情感角色与日常内容习惯。', 'Tune the emotional role and daily content habit.'],
+  ['studio.companionSetup', '角色设定', 'Companion setup'],
+  ['studio.relationship', '关系', 'Relationship'],
+  ['studio.language', '语言', 'Language'],
+  ['studio.tone', '语气', 'Tone'],
+  ['studio.avatar', '头像', 'Avatar'],
+  ['studio.closeness', '亲密度', 'Closeness'],
+  ['studio.support', '陪伴方式', 'Support'],
+  ['studio.careHabit', '关心习惯', 'Care habit'],
+  ['studio.memory', '记忆', 'Memory'],
+  ['studio.practiceStyle', '练习方式', 'Practice style'],
+  ['studio.correction', '纠正方式', 'Correction'],
+  ['studio.level', '程度', 'Level'],
+  ['studio.replyLength', '回复长度', 'Reply length'],
+  ['studio.naturalPhrases', '自然表达', 'Natural phrases'],
+  ['studio.careStatus', '陪伴状态', 'Care status'],
+  ['studio.detectedMood', '识别到的情绪', 'Detected mood'],
+  ['studio.valence', '情绪倾向', 'Valence'],
+  ['studio.dailyPush', '每日分享', 'Daily push'],
+  ['studio.time', '时间', 'Time'],
+  ['studio.maxDaily', '每日最多次数', 'Max daily'],
+  ['studio.customKeywords', '自定义关键词', 'Custom keywords'],
+  ['studio.categoryStopHint', '点击类别可停止这类内容；至少保留一个类别。', 'Click a category to stop this type of content. At least one category stays active.'],
+  ['studio.savedPicks', '已保存的内容', 'Saved picks'],
+  ['studio.wordBook', '生词本', 'Word book'],
+  ['studio.retrievalPlan', '内容检索计划', 'Retrieval plan'],
+  ['studio.notificationPreview', '通知预览', 'Notification preview'],
+  ['studio.notifications', '通知', 'Notifications'],
+  ['studio.quietHours', '免打扰时段', 'Quiet hours'],
+  ['studio.localScheduler', '本地日程', 'Local scheduler'],
+  ['studio.lastCheck', '上次检查', 'Last check'],
+  ['studio.lastAlerts', '上次提醒数', 'Last alerts'],
+  ['studio.sourceMode', '来源模式', 'Source mode'],
+  ['studio.longTermMemory', '长期记忆', 'Long-term memory'],
+  ['studio.storage', '存储位置', 'Storage'],
+  ['studio.savedItems', '已保存内容', 'Saved items'],
+  ['studio.size', '大小', 'Size'],
+  ['studio.privacyData', '隐私与数据', 'Privacy & data'],
+  ['studio.profile', '个人资料', 'Profile'],
+  ['studio.aiTraining', 'AI 训练', 'AI training'],
+  ['enum.mood.lonely', '孤独', 'Lonely'],
+  ['enum.mood.anxious', '焦虑', 'Anxious'],
+  ['enum.mood.sad', '难过', 'Sad'],
+  ['enum.mood.tired', '疲惫', 'Tired'],
+  ['enum.mood.positive', '积极', 'Positive'],
+  ['enum.mood.neutral', '平静', 'Neutral'],
+  ['enum.valence.negative', '低落', 'Negative'],
+  ['enum.valence.positive', '积极', 'Positive'],
+  ['enum.valence.neutral', '中性', 'Neutral'],
+
   ['vocabulary.title', '生词本', 'Word book'],
   ['vocabulary.eyebrow', '只在你需要时学习', 'LANGUAGE, WHEN YOU WANT IT'],
   ['vocabulary.description', '在对话中选中文字即可翻译，并保存到这里。', 'Select text in a conversation to translate it and keep it here.'],
@@ -363,6 +417,10 @@ const CATALOG_ENTRIES = Object.freeze([
   ['dailyPick.sourceExternal', '优先外部来源', 'External first'],
   ['dailyPick.sourceFallback', '模拟备用内容', 'Mock fallback'],
   ['dailyPick.notifications', '通知', 'Notifications'],
+  ['dailyPick.notificationsOff', '通知已关闭。', 'Notifications are off.'],
+  ['dailyPick.mutedQuietHours', '免打扰时段内不会发送通知。', 'Muted during quiet hours.'],
+  ['dailyPick.checkInTitle', '{name} 来关心你了', '{name} checked in on you'],
+  ['dailyPick.sharedTitle', '{name} 分享了一个 Daily Pick', '{name} shared a Daily Pick'],
   ['dailyPick.quietHours', '免打扰时段', 'Quiet hours'],
   ['dailyPick.enableQuietHours', '开启免打扰', 'Enable quiet hours'],
   ['dailyPick.disableQuietHours', '关闭免打扰', 'Disable quiet hours'],
@@ -485,36 +543,132 @@ const catalogs = {
 
 export const WYTH_LOCALES = Object.freeze(catalogs);
 
+export const ID_TO_TRANSLATION_KEY = Object.freeze({
+  relationship: Object.freeze({
+    Girlfriend: 'enum.relationship.girlfriend',
+    Boyfriend: 'enum.relationship.boyfriend',
+    Bestie: 'enum.relationship.bestie',
+    Mentor: 'enum.relationship.mentor',
+    'Tree hole': 'enum.relationship.treeHole',
+    'Knowledge brother': 'enum.relationship.knowledgeBrother'
+  }),
+  intimacy: Object.freeze({
+    gentle: 'enum.intimacy.gentle',
+    close: 'enum.intimacy.close',
+    deep: 'enum.intimacy.deep'
+  }),
+  supportMode: Object.freeze({
+    listen_first: 'enum.support.listenFirst',
+    gentle_advice: 'enum.support.gentleAdvice',
+    cheer_up: 'enum.support.cheerUp'
+  }),
+  proactiveCare: Object.freeze({
+    rarely: 'enum.proactiveCare.rarely',
+    sometimes: 'enum.proactiveCare.sometimes',
+    daily: 'enum.proactiveCare.daily'
+  }),
+  correctionMode: Object.freeze({
+    off: 'enum.correctionMode.off',
+    gentle_inline: 'enum.correctionMode.gentleInline',
+    after_reply: 'enum.correctionMode.afterReply'
+  }),
+  correctionIntensity: Object.freeze({
+    light: 'enum.correctionIntensity.light',
+    balanced: 'enum.correctionIntensity.balanced',
+    detailed: 'enum.correctionIntensity.detailed'
+  }),
+  replyLength: Object.freeze({
+    short: 'enum.replyLength.short',
+    medium: 'enum.replyLength.medium',
+    long: 'enum.replyLength.long'
+  }),
+  avatarStyle: Object.freeze({
+    'Soft anime portrait': 'enum.avatarStyle.softAnime',
+    'Clean realistic portrait': 'enum.avatarStyle.cleanRealistic',
+    'Minimal illustrated portrait': 'enum.avatarStyle.minimalIllustrated',
+    'Dreamy editorial portrait': 'enum.avatarStyle.dreamyEditorial'
+  }),
+  practiceLanguage: Object.freeze({
+    english: 'enum.practiceLanguage.english',
+    japanese: 'enum.practiceLanguage.japanese',
+    korean: 'enum.practiceLanguage.korean',
+    french: 'enum.practiceLanguage.french',
+    spanish: 'enum.practiceLanguage.spanish',
+    german: 'enum.practiceLanguage.german',
+    italian: 'enum.practiceLanguage.italian'
+  }),
+  provider: Object.freeze({
+    youtube: 'enum.provider.youtube',
+    news: 'enum.provider.news',
+    reddit: 'enum.provider.reddit',
+    web_search: 'enum.provider.webSearch'
+  }),
+  category: Object.freeze({
+    funny_videos: 'enum.category.funnyVideos',
+    world_news: 'enum.category.worldNews',
+    tech_news: 'enum.category.techNews',
+    psychology: 'enum.category.psychology',
+    healing_news: 'enum.category.healingNews',
+    music: 'enum.category.music',
+    deep_reads: 'enum.category.deepReads',
+    local_events: 'enum.category.localEvents',
+    daily_jokes: 'enum.category.dailyJokes',
+    internet_memes: 'enum.category.internetMemes'
+  }),
+  mood: Object.freeze({
+    lonely: 'enum.mood.lonely',
+    anxious: 'enum.mood.anxious',
+    sad: 'enum.mood.sad',
+    tired: 'enum.mood.tired',
+    positive: 'enum.mood.positive',
+    neutral: 'enum.mood.neutral'
+  }),
+  valence: Object.freeze({
+    negative: 'enum.valence.negative',
+    positive: 'enum.valence.positive',
+    neutral: 'enum.valence.neutral'
+  })
+});
+
 export function normalizeLocale(value) {
   const locale = String(value ?? '').trim().toLowerCase();
-  if (locale.startsWith('zh')) return 'zh-CN';
-  if (locale.startsWith('en')) return 'en';
+  if (/^zh(?:[-_]|$)/.test(locale)) return 'zh-CN';
+  if (/^en(?:[-_]|$)/.test(locale)) return 'en';
   return DEFAULT_LOCALE;
 }
 
 export function lookupCatalogString(catalogSet, locale, key) {
   const normalized = normalizeLocale(locale);
   const lookupKey = String(key ?? '');
-  return catalogSet?.[normalized]?.strings?.[lookupKey]
-    ?? catalogSet?.en?.strings?.[lookupKey]
-    ?? lookupKey;
+  const localizedStrings = catalogSet?.[normalized]?.strings;
+  const englishStrings = catalogSet?.en?.strings;
+  if (localizedStrings && Object.prototype.hasOwnProperty.call(localizedStrings, lookupKey)) {
+    return localizedStrings[lookupKey];
+  }
+  if (englishStrings && Object.prototype.hasOwnProperty.call(englishStrings, lookupKey)) {
+    return englishStrings[lookupKey];
+  }
+  return lookupKey;
 }
 
 export function t(locale, key, values = {}) {
   const template = lookupCatalogString(catalogs, locale, key);
+  const safeValues = values && typeof values === 'object' ? values : {};
 
   return template.replace(/\{(\w+)\}/g, (placeholder, name) => (
-    Object.prototype.hasOwnProperty.call(values, name) ? String(values[name]) : placeholder
+    Object.prototype.hasOwnProperty.call(safeValues, name) ? String(safeValues[name]) : placeholder
   ));
 }
 
-export function validateCatalogParity() {
-  const reference = new Set(Object.keys(catalogs.en.strings));
+export function validateCatalogParity(catalogSet = WYTH_LOCALES) {
+  const referenceStrings = catalogSet?.en?.strings || {};
+  const reference = new Set(Object.keys(referenceStrings));
   const missing = {};
 
-  for (const [locale, catalog] of Object.entries(catalogs)) {
-    const keys = Object.keys(catalog.strings);
-    const absent = [...reference].filter((key) => !Object.prototype.hasOwnProperty.call(catalog.strings, key));
+  for (const [locale, catalog] of Object.entries(catalogSet || {})) {
+    const strings = catalog?.strings || {};
+    const keys = Object.keys(strings);
+    const absent = [...reference].filter((key) => !Object.prototype.hasOwnProperty.call(strings, key));
     const extra = keys.filter((key) => !reference.has(key));
     if (absent.length > 0 || extra.length > 0) missing[locale] = { absent, extra };
   }

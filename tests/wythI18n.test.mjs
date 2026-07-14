@@ -1,8 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
+import { CATEGORY_LIBRARY, LANGUAGE_LIBRARY } from '../src/companionLogic.js';
+
 import {
   DEFAULT_LOCALE,
+  ID_TO_TRANSLATION_KEY,
   WYTH_LOCALES,
   lookupCatalogString,
   normalizeLocale,
@@ -47,9 +50,96 @@ test('catalog covers every current and planned user-facing surface', () => {
     'status.comingSoon'
   ];
 
-  for (const key of requiredKeys) {
+  const currentDynamicStudioKeys = [
+    'studio.eyebrow',
+    'studio.introTitle',
+    'studio.introDescription',
+    'studio.companionTitle',
+    'studio.companionDescription',
+    'studio.companionSetup',
+    'studio.relationship',
+    'studio.language',
+    'studio.tone',
+    'studio.avatar',
+    'studio.closeness',
+    'studio.support',
+    'studio.careHabit',
+    'studio.memory',
+    'studio.practiceStyle',
+    'studio.correction',
+    'studio.level',
+    'studio.replyLength',
+    'studio.naturalPhrases',
+    'studio.careStatus',
+    'studio.detectedMood',
+    'studio.valence',
+    'studio.dailyPush',
+    'studio.time',
+    'studio.maxDaily',
+    'studio.customKeywords',
+    'studio.categoryStopHint',
+    'studio.savedPicks',
+    'studio.wordBook',
+    'studio.retrievalPlan',
+    'studio.notificationPreview',
+    'studio.notifications',
+    'studio.quietHours',
+    'studio.localScheduler',
+    'studio.lastCheck',
+    'studio.lastAlerts',
+    'studio.sourceMode',
+    'studio.longTermMemory',
+    'studio.storage',
+    'studio.savedItems',
+    'studio.size',
+    'studio.privacyData',
+    'studio.profile',
+    'studio.aiTraining',
+    'enum.mood.lonely',
+    'enum.mood.anxious',
+    'enum.mood.sad',
+    'enum.mood.tired',
+    'enum.mood.positive',
+    'enum.mood.neutral',
+    'enum.valence.negative',
+    'enum.valence.positive',
+    'enum.valence.neutral',
+    'dailyPick.notificationsOff',
+    'dailyPick.mutedQuietHours',
+    'dailyPick.checkInTitle',
+    'dailyPick.sharedTitle'
+  ];
+
+  for (const key of [...requiredKeys, ...currentDynamicStudioKeys]) {
     assert.notEqual(WYTH_LOCALES.en.strings[key], undefined, `missing English key: ${key}`);
     assert.notEqual(WYTH_LOCALES['zh-CN'].strings[key], undefined, `missing Chinese key: ${key}`);
+  }
+});
+
+test('runtime IDs map directly to existing translation keys', () => {
+  const runtimeIds = {
+    relationship: ['Girlfriend', 'Boyfriend', 'Bestie', 'Mentor', 'Tree hole', 'Knowledge brother'],
+    intimacy: ['gentle', 'close', 'deep'],
+    supportMode: ['listen_first', 'gentle_advice', 'cheer_up'],
+    proactiveCare: ['rarely', 'sometimes', 'daily'],
+    correctionMode: ['off', 'gentle_inline', 'after_reply'],
+    correctionIntensity: ['light', 'balanced', 'detailed'],
+    replyLength: ['short', 'medium', 'long'],
+    avatarStyle: ['Soft anime portrait', 'Clean realistic portrait', 'Minimal illustrated portrait', 'Dreamy editorial portrait'],
+    practiceLanguage: Object.keys(LANGUAGE_LIBRARY),
+    provider: ['youtube', 'news', 'reddit', 'web_search'],
+    category: Object.keys(CATEGORY_LIBRARY),
+    mood: ['lonely', 'anxious', 'sad', 'tired', 'positive', 'neutral'],
+    valence: ['negative', 'positive', 'neutral']
+  };
+
+  for (const [group, ids] of Object.entries(runtimeIds)) {
+    for (const id of ids) {
+      const key = ID_TO_TRANSLATION_KEY[group]?.[id];
+      assert.equal(typeof key, 'string', `missing translation mapping for ${group}:${id}`);
+      assert.equal(typeof WYTH_LOCALES.en.strings[key], 'string', `mapping points to missing English key: ${key}`);
+      assert.equal(typeof WYTH_LOCALES['zh-CN'].strings[key], 'string', `mapping points to missing Chinese key: ${key}`);
+    }
   }
 });
 
@@ -120,8 +210,17 @@ test('normalizes supported locale families and defaults unknown locales to Chine
   assert.equal(normalizeLocale('zh-Hans-CN'), 'zh-CN');
   assert.equal(normalizeLocale('en-US'), 'en');
   assert.equal(normalizeLocale('EN_gb'), 'en');
+  assert.equal(normalizeLocale('english'), 'zh-CN');
+  assert.equal(normalizeLocale('enochian'), 'zh-CN');
+  assert.equal(normalizeLocale('zhang'), 'zh-CN');
   assert.equal(normalizeLocale('fr'), 'zh-CN');
   assert.equal(normalizeLocale(null), 'zh-CN');
+});
+
+test('catalog lookup ignores properties inherited from Object.prototype', () => {
+  assert.equal(lookupCatalogString(WYTH_LOCALES, 'en', 'toString'), 'toString');
+  assert.equal(lookupCatalogString(WYTH_LOCALES, 'zh-CN', 'constructor'), 'constructor');
+  assert.equal(t('en', 'toString'), 'toString');
 });
 
 test('looks up strings, falls back safely, and exposes document metadata', () => {
@@ -147,8 +246,23 @@ test('falls back to English before returning the key when a locale catalog is in
   );
 });
 
+test('catalog parity reports injected missing and extra own keys', () => {
+  const injected = {
+    en: { strings: { shared: 'Shared', required: 'Required' } },
+    'zh-CN': { strings: { shared: '共有', unexpected: '多余' } }
+  };
+
+  assert.deepEqual(validateCatalogParity(injected), {
+    ok: false,
+    missing: {
+      'zh-CN': { absent: ['required'], extra: ['unexpected'] }
+    }
+  });
+});
+
 test('interpolates values without rewriting user content or unresolved placeholders', () => {
   assert.equal(t('zh-CN', 'chat.replying', { name: 'Mia' }), 'Mia 正在回复…');
   assert.equal(t('en', 'chat.replying', { name: '<Mia & You>' }), '<Mia & You> is replying…');
   assert.equal(t('en', 'accessibility.removeWord'), 'Remove {word}');
+  assert.equal(t('en', 'chat.replying', null), '{name} is replying…');
 });
