@@ -32,6 +32,12 @@ const DEFAULT_DRAFT = Object.freeze({
   voiceId: ''
 });
 
+const RELATIONSHIPS = new Set(['Girlfriend', 'Boyfriend', 'Bestie', 'Mentor', 'Tree hole', 'Knowledge brother']);
+const ROMANTIC_RELATIONSHIPS = new Set(['Girlfriend', 'Boyfriend']);
+const LANGUAGES = new Set(['english', 'japanese', 'korean', 'french', 'spanish', 'german', 'italian']);
+const SCENES = new Set(['friend_room', 'listener_rain', 'traveler_train', 'workmate_desk', 'coach_study']);
+const VISUAL_STYLES = new Set(['cinematic_semireal', 'digital_human', 'illustration']);
+
 function safeDraft(input = {}) {
   return Object.fromEntries(DRAFT_KEYS.map((key) => [
     key,
@@ -59,3 +65,30 @@ export function updateCreationDraft(flow, updates = {}) {
   return { ...flow, draft: safeDraft({ ...flow.draft, ...allowedUpdates }) };
 }
 
+export function validateCreationStep(flow, options = {}) {
+  const { draft, step } = flow;
+  if (step === 'identity') {
+    if (!String(draft.name || '').trim()) return { ok: false, error: 'name_required', field: 'name' };
+    if (!VISUAL_STYLES.has(draft.visualStyle)) return { ok: false, error: 'visual_style_invalid', field: 'visualStyle' };
+  }
+  if (step === 'relationship') {
+    if (!RELATIONSHIPS.has(draft.relationshipType)) return { ok: false, error: 'relationship_invalid', field: 'relationshipType' };
+    if (options.ageGroup === 'minor' && ROMANTIC_RELATIONSHIPS.has(draft.relationshipType)) {
+      return { ok: false, error: 'relationship_minor', field: 'relationshipType' };
+    }
+  }
+  if (step === 'personality' && !String(draft.personality || '').trim()) {
+    return { ok: false, error: 'personality_required', field: 'personality' };
+  }
+  if (step === 'language' && !LANGUAGES.has(draft.language)) {
+    return { ok: false, error: 'language_invalid', field: 'language' };
+  }
+  if (step === 'voice_scene' && !SCENES.has(draft.sceneId)) {
+    return { ok: false, error: 'scene_invalid', field: 'sceneId' };
+  }
+  return { ok: true };
+}
+
+export function canSubmitCreation(flow) {
+  return flow.mode === 'quick' || (flow.mode === 'advanced' && flow.step === 'review');
+}
