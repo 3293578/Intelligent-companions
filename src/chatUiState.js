@@ -1,4 +1,4 @@
-const PENDING_REPLY_TEXT = 'Thinking...';
+const PENDING_REPLY_TEXT = '';
 
 export function canSendChatMessage(chatUiState, content) {
   return Boolean(String(content || '').trim()) && !chatUiState.pendingCompanionId;
@@ -57,13 +57,13 @@ export function createDailyPushActions({ companion, message }) {
     {
       action: 'save-pick',
       category,
-      label: 'Save pick',
+      labelKey: 'dailyPick.save',
       disabled: false
     },
     {
       action: 'stop-category',
       category,
-      label: disabled ? 'Only category left' : 'Stop this type',
+      labelKey: disabled ? 'dailyPick.categoryMinimum' : 'dailyPick.stopCategory',
       disabled
     }
   ];

@@ -21,8 +21,8 @@ test('parseTranslateProxyRequest requires POST and non-empty text', async () => 
   );
 });
 
-test('parseTranslateProxyRequest trims and bounds text and context', async () => {
-  const longText = 'a'.repeat(500);
+test('parseTranslateProxyRequest accepts a full paragraph while bounding abuse', async () => {
+  const longText = 'a'.repeat(2_500);
   const parsed = await parseTranslateProxyRequest({
     method: 'POST',
     json: async () => ({
@@ -31,7 +31,7 @@ test('parseTranslateProxyRequest trims and bounds text and context', async () =>
     })
   });
 
-  assert.equal(parsed.text.length, 280);
+  assert.equal(parsed.text.length, 2_000);
   assert.equal(parsed.context.length, 600);
 });
 

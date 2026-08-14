@@ -9,6 +9,7 @@ import {
   createAssistantReply,
   createCompanion,
   createDailyPush,
+  createEmptyState,
   createSeedState,
   createUserMessage,
   curateContentForCompanion,
@@ -19,12 +20,21 @@ import {
   normalizeRetrievedContent,
   previewNotification,
   runScheduledDailyPushes,
+  hasSchedulerStateChanged,
   serializeState,
   stopPushCategory,
   updateCompanion,
   updateUserProfile,
   updateMemory
 } from '../src/companionLogic.js';
+
+test('new Wyth installations start empty so the first-use companion chooser can render', () => {
+  const state = createEmptyState();
+  assert.equal(state.companions.length, 0);
+  assert.equal(state.messages.length, 0);
+  assert.equal(state.selectedCompanionId, '');
+  assert.equal(state.user.privacy.localOnly, true);
+});
 
 test('seed state includes multiple companions with independent messages', () => {
   const state = createSeedState();
@@ -250,6 +260,20 @@ test('assistant replies include emotion metadata for the latest user message', (
   assert.equal(reply.metadata.emotion.label, 'lonely');
   assert.equal(reply.metadata.emotion.valence, 'negative');
   assert.ok(reply.metadata.emotion.supportHint.includes('listen'));
+});
+
+test('local support replies acknowledge the user without diagnosing or over-questioning', () => {
+  const companion = createCompanion({ name: 'Luna', careStyle: { supportMode: 'listen_first' } });
+  const reply = createAssistantReply(
+    companion,
+    createUserMessage(companion.id, 'I feel exhausted after today.'),
+    []
+  );
+
+  assert.match(reply.content, /exhausted|heavy|a lot/i);
+  assert.doesNotMatch(reply.content, /diagnos|definitely|you have/i);
+  assert.equal((reply.content.match(/\?/g) || []).length <= 1, true);
+  assert.equal(reply.metadata.support.level, 'light');
 });
 
 test('assistant reply changes emotional support wording by support mode', () => {
@@ -554,10 +578,12 @@ test('scheduled daily pushes run only after companion schedule time', () => {
 
   const early = runScheduledDailyPushes(state, {
     now: '2026-07-03T07:30:00',
+    proactiveContactOverride: 'off',
     notificationPreferences: { enabled: true }
   });
   const onTime = runScheduledDailyPushes(state, {
     now: '2026-07-03T08:05:00',
+    proactiveContactOverride: 'off',
     notificationPreferences: { enabled: true }
   });
 
@@ -589,6 +615,7 @@ test('scheduled daily pushes respect maxDaily per companion per day', () => {
 
   const result = runScheduledDailyPushes(state, {
     now: '2026-07-03T19:00:00',
+    proactiveContactOverride: 'off',
     notificationPreferences: { enabled: true }
   });
 
@@ -612,6 +639,7 @@ test('scheduled daily pushes can use companion-specific retrieved sources', () =
 
   const result = runScheduledDailyPushes(state, {
     now: '2026-07-03T08:05:00',
+    proactiveContactOverride: 'off',
     notificationPreferences: { enabled: true },
     sourcesByCompanion: {
       [companion.id]: [
@@ -703,6 +731,7 @@ test('scheduled care check-ins follow proactive care frequency and avoid duplica
     },
     pushTime: '23:00'
   });
+  rarely.createdAt = '2026-07-04T10:00:00.000Z';
   const state = {
     selectedCompanionId: companion.id,
     companions: [companion, rarely],
@@ -901,6 +930,182 @@ test('updates local user profile and privacy settings', () => {
   assert.equal(updated.privacy.showPrivacyNotice, false);
 });
 
+test('quick proactive override controls care check-ins without suppressing Daily Picks', () => {
+  const companion = createCompanion({
+    id: 'companion_luna',
+    name: 'Luna',
+    careStyle: { proactiveCareFrequency: 'daily' },
+    pushCategories: ['healing_news'],
+    pushTime: '08:00',
+    maxDaily: 1
+  });
+  companion.createdAt = '2026-07-05T08:00:00.000Z';
+  const state = { selectedCompanionId: companion.id, companions: [companion], messages: [] };
+
+  const off = runScheduledDailyPushes(state, {
+    now: '2026-07-06T09:00:00.000Z',
+    proactiveContactOverride: 'off',
+    notificationPreferences: { enabled: true }
+  });
+  assert.equal(off.messages.filter((message) => message.metadata?.kind === 'care_check_in').length, 0);
+  assert.equal(off.messages.filter((message) => message.role === 'system_push').length, 1);
+
+  const daily = runScheduledDailyPushes(state, {
+    now: '2026-07-05T09:00:00.000Z',
+    proactiveContactOverride: 'daily',
+    notificationPreferences: { enabled: true }
+  });
+  const rarely = runScheduledDailyPushes(state, {
+    now: '2026-07-05T09:00:00.000Z',
+    proactiveContactOverride: 'rarely',
+    notificationPreferences: { enabled: true }
+  });
+  assert.equal(daily.messages.filter((message) => message.metadata?.kind === 'care_check_in').length, 1);
+  assert.equal(rarely.messages.filter((message) => message.metadata?.kind === 'care_check_in').length, 0);
+});
+
+test('rare proactive override waits seven days since the latest care check-in', () => {
+  const companion = createCompanion({
+    id: 'companion_luna',
+    name: 'Luna',
+    pushTime: '23:00',
+    careStyle: { proactiveCareFrequency: 'daily' }
+  });
+  companion.createdAt = '2026-07-05T08:00:00.000Z';
+  const previous = {
+    id: 'care_previous',
+    companionId: companion.id,
+    role: 'assistant',
+    content: 'Checking in.',
+    createdAt: '2026-07-01T09:00:00.000Z',
+    metadata: { kind: 'care_check_in' }
+  };
+  const state = { companions: [companion], messages: [previous] };
+  const recent = runScheduledDailyPushes(state, {
+    now: '2026-07-07T10:00:00.000Z',
+    proactiveContactOverride: 'rarely'
+  });
+  const due = runScheduledDailyPushes(state, {
+    now: '2026-07-08T10:00:00.000Z',
+    proactiveContactOverride: 'rarely'
+  });
+  assert.equal(recent.messages.filter((message) => message.metadata?.kind === 'care_check_in').length, 1);
+  assert.equal(due.messages.filter((message) => message.metadata?.kind === 'care_check_in').length, 2);
+});
+
+test('rare proactive override anchors its first check-in to companion creation time', () => {
+  const base = createCompanion({ id: 'companion_luna', name: 'Luna', pushTime: '23:00' });
+  const companion = { ...base, createdAt: '2026-07-01T10:00:00.000Z' };
+  const state = { companions: [companion], messages: [] };
+  const early = runScheduledDailyPushes(state, {
+    now: '2026-07-07T09:59:00.000Z',
+    proactiveContactOverride: 'rarely'
+  });
+  const due = runScheduledDailyPushes(state, {
+    now: '2026-07-08T10:00:00.000Z',
+    proactiveContactOverride: 'rarely'
+  });
+  assert.equal(early.messages.filter((message) => message.metadata?.kind === 'care_check_in').length, 0);
+  assert.equal(due.messages.filter((message) => message.metadata?.kind === 'care_check_in').length, 1);
+});
+
+test('rare proactive override allows one initial check-in for legacy companions without timestamps', () => {
+  const companion = createCompanion({ id: 'companion_legacy', name: 'Legacy', pushTime: '23:00' });
+  delete companion.createdAt;
+  const result = runScheduledDailyPushes({ companions: [companion], messages: [] }, {
+    now: '2026-07-08T10:00:00.000Z',
+    proactiveContactOverride: 'rarely'
+  });
+  assert.equal(result.messages.filter((message) => message.metadata?.kind === 'care_check_in').length, 1);
+});
+
+test('scheduler ignores invalid message dates and detects whether state changed', () => {
+  const companion = createCompanion({ id: 'companion_safe', pushTime: '23:00', maxDaily: 1 });
+  const state = { companions: [companion], messages: [{ id: 'bad', companionId: companion.id, role: 'system_push', createdAt: 'not-a-date' }] };
+  const unchanged = runScheduledDailyPushes(state, { now: '2026-07-08T10:00:00.000Z', proactiveContactOverride: 'off' });
+  assert.equal(hasSchedulerStateChanged(state, unchanged), false);
+  const changed = runScheduledDailyPushes(state, { now: '2026-07-08T23:30:00.000Z', proactiveContactOverride: 'off' });
+  assert.equal(hasSchedulerStateChanged(state, changed), true);
+});
+
+test('scheduler uses one explicit calendar offset across UTC midnight', () => {
+  const companion = createCompanion({ id: 'companion_tz', pushTime: '00:30', maxDaily: 1 });
+  const prior = { ...createDailyPush(companion), createdAt: '2026-07-08T23:40:00.000Z' };
+  const state = { companions: [companion], messages: [prior] };
+  const result = runScheduledDailyPushes(state, {
+    now: '2026-07-09T00:10:00.000Z',
+    timezoneOffsetMinutes: 120,
+    proactiveContactOverride: 'off'
+  });
+  assert.equal(result.messages.length, 1, 'both timestamps are July 9 in UTC+2');
+});
+
+test('quiet hours suppress care check-ins but leave scheduled Daily Picks available', () => {
+  const companion = createCompanion({ id: 'companion_quiet', pushTime: '22:00', maxDaily: 1 });
+  const result = runScheduledDailyPushes({ companions: [companion], messages: [] }, {
+    now: '2026-07-08T23:00:00.000Z',
+    proactiveContactOverride: 'daily',
+    notificationPreferences: { enabled: true, quietHours: { enabled: true, start: '22:30', end: '07:00' } }
+  });
+  assert.equal(result.messages.filter((message) => message.metadata?.kind === 'care_check_in').length, 0);
+  assert.equal(result.messages.filter((message) => message.role === 'system_push').length, 1);
+});
+
+test('Daily Pick notification quiet hours use the same positive and negative calendar offsets', () => {
+  const companion = createCompanion({ id: 'companion_notify_tz', pushTime: '00:00', maxDaily: 1 });
+  const positive = runScheduledDailyPushes({ companions: [companion], messages: [] }, {
+    now: '2026-07-08T06:05:00.000Z',
+    timezoneOffsetMinutes: 120,
+    proactiveContactOverride: 'off',
+    notificationPreferences: { enabled: true, quietHours: { enabled: true, start: '22:30', end: '07:00' } }
+  });
+  const negative = runScheduledDailyPushes({ companions: [companion], messages: [] }, {
+    now: '2026-07-09T04:00:00.000Z',
+    timezoneOffsetMinutes: -300,
+    proactiveContactOverride: 'off',
+    notificationPreferences: { enabled: true, quietHours: { enabled: true, start: '22:30', end: '07:00' } }
+  });
+  assert.equal(positive.notifications.length, 1, 'UTC+2 local time is 08:05 and not quiet');
+  assert.equal(negative.notifications.length, 0, 'UTC-5 local time is 23:00 and quiet');
+});
+
+test('future care and creation anchors are ignored safely', () => {
+  const companion = { ...createCompanion({ id: 'companion_future', pushTime: '23:00' }), createdAt: '2030-01-01T00:00:00.000Z' };
+  const futureCare = { id: 'future', companionId: companion.id, role: 'assistant', createdAt: '2030-01-02T00:00:00.000Z', metadata: { kind: 'care_check_in' } };
+  const result = runScheduledDailyPushes({ companions: [companion], messages: [futureCare] }, {
+    now: '2026-07-08T10:00:00.000Z', proactiveContactOverride: 'rarely'
+  });
+  assert.equal(result.messages.filter((message) => message.metadata?.kind === 'care_check_in').length, 2);
+});
+
+test('push schedules normalize invalid time and maxDaily on create, update, and deserialize', () => {
+  const created = createCompanion({ pushTime: '99:90', maxDaily: 'x' });
+  assert.deepEqual(created.pushSchedule, { ...created.pushSchedule, time: '08:00', maxDaily: 1 });
+  const updated = updateCompanion(created, { pushTime: '7:00', maxDaily: 99, timezone: 'Ignored/Legacy' });
+  assert.equal(updated.pushSchedule.time, '08:00');
+  assert.equal(updated.pushSchedule.maxDaily, 5);
+  const restored = deserializeState(JSON.stringify({ companions: [{ ...created, pushSchedule: { time: 'bad', maxDaily: Infinity, timezone: 'UTC' } }], messages: [] }));
+  assert.equal(restored.companions[0].pushSchedule.time, '08:00');
+  assert.equal(restored.companions[0].pushSchedule.maxDaily, 1);
+});
+
+test('sometimes proactive cadence uses a two-day anchor instead of calendar parity', () => {
+  const companion = { ...createCompanion({ id: 'companion_some', pushTime: '23:00' }), createdAt: '2026-07-01T10:00:00.000Z' };
+  const state = { companions: [companion], messages: [] };
+  const early = runScheduledDailyPushes(state, { now: '2026-07-03T09:59:00.000Z', proactiveContactOverride: 'sometimes' });
+  const due = runScheduledDailyPushes(state, { now: '2026-07-03T10:00:00.000Z', proactiveContactOverride: 'sometimes' });
+  assert.equal(early.messages.filter((message) => message.metadata?.kind === 'care_check_in').length, 0);
+  assert.equal(due.messages.filter((message) => message.metadata?.kind === 'care_check_in').length, 1);
+  const next = runScheduledDailyPushes(due, { now: '2026-07-05T10:00:00.000Z', proactiveContactOverride: 'sometimes' });
+  assert.equal(next.messages.filter((message) => message.metadata?.kind === 'care_check_in').length, 2);
+});
+
+test('retrieved content rejects non-http URLs', () => {
+  assert.equal(normalizeRetrievedContent('web', { id: 'bad-js', title: 'Bad', url: 'javascript:alert(1)' }), null);
+  assert.equal(normalizeRetrievedContent('web', { id: 'bad-data', title: 'Bad data', url: 'data:text/html,bad' }), null);
+  assert.equal(normalizeRetrievedContent('web', { id: 'good', title: 'Good', url: 'https://example.com/good' }).id, 'good');
+});
+
 test('updates onboarding profile fields while preserving privacy and deriving age', () => {
   const state = createSeedState();
 
@@ -1011,6 +1216,61 @@ test('createCompanion defaults language to english and normalizes unknown values
   assert.equal(createCompanion({ name: 'Luna' }).language, 'english');
   assert.equal(createCompanion({ name: 'Aki', language: 'Japanese' }).language, 'japanese');
   assert.equal(createCompanion({ name: 'X', language: 'klingon' }).language, 'english');
+});
+
+test('companion creation stores advanced identity fields with safe defaults', () => {
+  const defaults = createCompanion({ name: 'Mia' });
+  const custom = createCompanion({
+    name: 'Aki',
+    backgroundStory: 'A patient night-train photographer.',
+    visualStyle: 'illustration',
+    voiceId: 'warm_alto'
+  });
+
+  assert.equal(defaults.backgroundStory, '');
+  assert.equal(defaults.visualStyle, 'cinematic_semireal');
+  assert.equal(defaults.voiceId, '');
+  assert.equal(custom.backgroundStory, 'A patient night-train photographer.');
+  assert.equal(custom.visualStyle, 'illustration');
+  assert.equal(custom.voiceId, 'warm_alto');
+});
+
+test('companion updates advanced fields without losing runtime configuration', () => {
+  const companion = createCompanion({
+    name: 'Mia',
+    backgroundStory: 'Old story',
+    customKeywords: ['cafes'],
+    pushCategories: ['music'],
+    contentSources: { enabledProviders: ['news'] },
+    memorySummary: 'Likes rain.',
+    careStyle: { supportMode: 'listen_first' },
+    practiceStyle: { correctionMode: 'off' }
+  });
+  const updated = updateCompanion(companion, {
+    backgroundStory: 'New story', visualStyle: 'digital_human', voiceId: ''
+  });
+
+  assert.equal(updated.backgroundStory, 'New story');
+  assert.equal(updated.visualStyle, 'digital_human');
+  assert.deepEqual(updated.customKeywords, companion.customKeywords);
+  assert.deepEqual(updated.pushCategories, companion.pushCategories);
+  assert.deepEqual(updated.contentSources, companion.contentSources);
+  assert.equal(updated.memorySummary, 'Likes rain.');
+  assert.deepEqual(updated.careStyle, companion.careStyle);
+  assert.deepEqual(updated.practiceStyle, companion.practiceStyle);
+});
+
+test('stored companions migrate missing advanced creation fields', () => {
+  const restored = deserializeState(JSON.stringify({
+    user: {},
+    selectedCompanionId: 'legacy',
+    companions: [{ id: 'legacy', name: 'Legacy', relationshipType: 'Bestie' }],
+    messages: []
+  }));
+
+  assert.equal(restored.companions[0].backgroundStory, '');
+  assert.equal(restored.companions[0].visualStyle, 'cinematic_semireal');
+  assert.equal(restored.companions[0].voiceId, '');
 });
 
 test('updateCompanion can change the practice language', () => {

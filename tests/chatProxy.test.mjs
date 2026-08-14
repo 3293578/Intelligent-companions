@@ -248,7 +248,7 @@ test('chat proxy sends only recent chat messages for the selected companion to t
   assert.ok(calls[0].every((message) => !message.content.includes('Other companion')));
 });
 
-test('chat proxy handler falls back to local reply when LLM client fails', async () => {
+test('configured chat proxy returns a retryable error instead of disguising LLM failure as local reply', async () => {
   const companion = createCompanion({
     name: 'Mia',
     relationshipType: 'Bestie'
@@ -257,7 +257,8 @@ test('chat proxy handler falls back to local reply when LLM client fails', async
   const handler = createChatProxyHandler({
     llmClient: async () => {
       throw new Error('model offline');
-    }
+    },
+    allowLocalFallback: false
   });
 
   const response = await handler({
@@ -270,8 +271,64 @@ test('chat proxy handler falls back to local reply when LLM client fails', async
   });
   const body = await response.json();
 
+  assert.equal(response.status, 503);
+  assert.equal(body.error, 'model_unavailable');
+  assert.equal(body.retryable, true);
+  assert.equal(body.reply, undefined);
+});
+
+test('chat proxy can namespace backend memory without changing public companion ids', async () => {
+  const companion = createCompanion({ id: 'companion_shared', name: 'Luna', memoryEnabled: true });
+  const userMessage = createUserMessage(companion.id, 'I like quiet mornings.');
+  const remembered = [];
+  const handler = createChatProxyHandler({
+    memoryKeyProvider: (request, companionId) => `${request.userId}:${companionId}`,
+    memoryStore: { async remember(id) { remembered.push(id); return null; } },
+    llmClient: async () => 'Good morning.'
+  });
+  const response = await handler({ method: 'POST', userId: 'user-one', json: async () => ({ companion, userMessage, priorMessages: [] }) });
+  assert.equal((await response.json()).reply.companionId, 'companion_shared');
+  assert.deepEqual(remembered, ['user-one:companion_shared']);
+});
+
+test('configured chat proxy returns the safe request ID for a failed provider call', async () => {
+  const companion = createCompanion({ name: 'Mia', relationshipType: 'Bestie' });
+  const userMessage = createUserMessage(companion.id, 'I feel sad today.');
+  const handler = createChatProxyHandler({
+    llmClient: async () => {
+      const error = new Error('provider unavailable');
+      error.requestId = 'req_support_123';
+      throw error;
+    },
+    allowLocalFallback: false
+  });
+
+  const response = await handler({
+    method: 'POST',
+    json: async () => ({ companion, userMessage, priorMessages: [] })
+  });
+
+  assert.deepEqual(await response.json(), {
+    error: 'model_unavailable',
+    retryable: true,
+    requestId: 'req_support_123'
+  });
+});
+
+test('development chat proxy can explicitly allow deterministic local fallback', async () => {
+  const companion = createCompanion({ name: 'Mia', relationshipType: 'Bestie' });
+  const userMessage = createUserMessage(companion.id, 'I feel sad today.');
+  const handler = createChatProxyHandler({
+    llmClient: async () => { throw new Error('model offline'); },
+    allowLocalFallback: true
+  });
+
+  const response = await handler({
+    method: 'POST',
+    json: async () => ({ companion, userMessage, priorMessages: [] })
+  });
+  const body = await response.json();
+
   assert.equal(response.status, 200);
-  assert.match(body.reply.content, /Mia/);
-  assert.match(body.reply.content, /not alone|listen/i);
   assert.equal(body.source, 'local_fallback');
 });

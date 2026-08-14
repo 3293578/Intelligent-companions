@@ -45,6 +45,20 @@ Wyth should communicate:
 
 It must not present itself as a therapist, a medical service, or a replacement for human relationships.
 
+### 2.4 Founding use case: a steady window during uncertainty
+
+Wyth began from a concrete moment: a young person feels lost about study, work, relationships, or the future and wants one place that can understand the feeling without losing the ability to reason clearly.
+
+The desired outcome is not dependency or the illusion of an all-knowing authority. Wyth should:
+
+- listen and reflect the user's emotional state before proposing solutions;
+- distinguish known facts, interpretations, and suggestions instead of speaking with false certainty;
+- help the user reduce a vague worry into one small next step;
+- say when it is uncertain and encourage appropriate human or professional support when stakes are high;
+- preserve the user's agency: Wyth accompanies a decision but does not make the decision for them.
+
+This is the primary product-validation scenario. New features should be evaluated first by whether they make this moment safer, clearer, and more human—not by whether they increase feature count or simulated intimacy.
+
 ## 3. Experience Principles
 
 1. **Conversation remains the interface.** The active relationship and composer dominate the default screen.
@@ -57,6 +71,7 @@ It must not present itself as a therapist, a medical service, or a replacement f
 8. **Privacy remains legible.** Sensitive data use is explained where it is requested, and users can skip, inspect, edit, or delete it.
 9. **No fake controls.** Deferred capabilities are visibly marked `即将开放` / `Coming soon` and remain disabled.
 10. **Accessibility is part of the visual system.** Reduced motion, readable contrast, keyboard access, and clear focus are required behavior.
+11. **Grounded warmth over artificial authority.** Wyth can be emotionally perceptive and well-reasoned, but it must not fabricate expertise, certainty, or credentials.
 
 ## 4. Visual Direction
 

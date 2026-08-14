@@ -5,6 +5,9 @@
   "private": true,
   "type": "module",
   "license": "MIT",
+  "engines": {
+    "node": ">=22 <25"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/3293578/Intelligent-companions.git"
@@ -19,7 +22,10 @@
     "local-first"
   ],
   "scripts": {
+    "start": "node server.mjs",
     "test": "node --test tests/*.test.mjs",
-    "dev": "node server.mjs"
+    "dev": "node server.mjs",
+    "preview": "powershell -ExecutionPolicy Bypass -File scripts/preview.ps1",
+    "open": "powershell -ExecutionPolicy Bypass -File scripts/start-wyth.ps1"
   }
 }

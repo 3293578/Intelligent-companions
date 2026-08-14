@@ -1,204 +1,189 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>English Companions</title>
+  <title data-i18n="brand.windowTitle">Wyth - with warmth</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <div class="app-shell">
-    <aside class="companion-rail" aria-label="Companion list">
+    <div class="scene-viewport" id="sceneViewport" aria-hidden="true">
+      <div class="scene-layer scene-layer-outgoing" id="sceneOutgoing"></div>
+      <div class="scene-layer scene-layer-current" id="sceneCurrent"></div>
+      <canvas class="scene-atmosphere" id="sceneAtmosphere" aria-hidden="true"></canvas>
+      <div class="scene-continuity"></div>
+      <div class="scene-vignette"></div>
+    </div>
+
+    <aside class="companion-rail" data-i18n-aria-label="accessibility.companionList" aria-label="Companion list">
       <div class="brand-block">
-        <div class="brand-mark">EC</div>
-        <div>
-          <h1>English Companions</h1>
-          <p>Warm chat plus daily curated picks.</p>
-        </div>
+        <div class="brand-mark" aria-hidden="true">W</div>
+        <h1>Wyth</h1>
       </div>
-
-      <button class="profile-card" id="openProfileButton" type="button"></button>
-
-      <button class="primary-action" id="openCreateButton" type="button">Create companion</button>
-
-      <div class="section-label">My companions</div>
       <div class="companion-list" id="companionList"></div>
     </aside>
 
-    <main class="chat-panel" aria-label="Selected companion chat">
+    <main class="chat-panel" data-i18n-aria-label="accessibility.selectedCompanionChat" aria-label="Selected companion chat">
       <header class="chat-header" id="chatHeader"></header>
+      <section class="support-presence" id="companionPresence" hidden aria-live="polite">
+        <div class="support-presence-visual" id="supportPresenceVisual" aria-hidden="true"></div>
+        <div class="support-presence-copy">
+          <strong id="supportPresenceTitle"></strong>
+          <span id="supportPresenceMessage"></span>
+        </div>
+        <button class="support-presence-dismiss" type="button" data-action="dismiss-support" data-i18n-aria-label="support.dismiss" aria-label="暂时收起">×</button>
+      </section>
       <section class="message-list" id="messageList" aria-live="polite"></section>
       <form class="composer" id="messageForm">
-        <input id="messageInput" type="text" autocomplete="off" placeholder="Share your day in English...">
-        <button type="submit">Send</button>
+        <button class="stay-with-me" type="button" data-action="stay-with-me" data-i18n="support.stayWithMe">陪陪我</button>
+        <input id="messageInput" type="text" autocomplete="off" data-i18n-placeholder="chat.placeholder" placeholder="慢慢说，我在这里…">
+        <button type="submit" data-i18n="chat.send">发送</button>
       </form>
     </main>
 
-    <aside class="studio-panel" aria-label="Companion studio">
+    <nav class="utility-dock" id="utilityDock" data-i18n-aria-label="accessibility.wythTools" aria-label="Wyth tools">
+      <button class="dock-button" id="openCreateButton" type="button" data-action="open-drawer" data-drawer="create" data-i18n-aria-label="accessibility.createCompanion" aria-label="Create companion">+</button>
+      <button class="dock-button" type="button" data-action="open-drawer" data-drawer="vocabulary" data-i18n-aria-label="accessibility.openVocabulary" aria-label="Open vocabulary">词</button>
+      <button class="dock-button" type="button" data-action="open-drawer" data-drawer="settings" data-i18n-aria-label="accessibility.openSettings" aria-label="Open settings">···</button>
+    </nav>
+
+    <aside class="utility-drawer" id="utilityDrawer" data-i18n-aria-label="accessibility.wythTools" aria-label="Wyth tools" aria-hidden="true" inert>
+      <div class="drawer-header">
+        <p id="drawerTitle">Wyth tools</p>
+        <button class="icon-button" type="button" id="closeDrawerButton" data-i18n-aria-label="accessibility.closeTools" aria-label="Close tools">x</button>
+      </div>
+      <button class="profile-card" id="openProfileButton" type="button"></button>
       <div id="studioPanel"></div>
     </aside>
+
+    <section class="full-settings-surface" id="fullSettings" role="dialog" aria-modal="true" aria-labelledby="fullSettingsTitle" aria-hidden="true" inert>
+      <div class="full-settings-header">
+        <div>
+          <span class="eyebrow" data-i18n="brand.tagline">with warmth</span>
+          <h2 id="fullSettingsTitle" data-i18n="settings.full.title">完整设置</h2>
+        </div>
+        <button class="icon-button" type="button" id="closeFullSettingsButton" data-i18n-aria-label="accessibility.closeFullSettings" aria-label="Close full settings">x</button>
+      </div>
+      <div class="full-settings-layout">
+        <nav class="full-settings-nav" id="fullSettingsNav" data-i18n-aria-label="accessibility.settingsSections" aria-label="Settings sections"></nav>
+        <main class="full-settings-content" id="fullSettingsContent" tabindex="-1"></main>
+      </div>
+    </section>
+
+    <section class="first-use" id="firstUse" hidden aria-labelledby="firstUseTitle">
+      <div class="onboarding-language" id="interfaceLanguageSwitch" role="group" data-i18n-aria-label="accessibility.interfaceLanguage" aria-label="Interface language">
+        <button type="button" data-locale="zh-CN" data-i18n-aria-label="accessibility.localeChinese" aria-label="切换为简体中文" aria-pressed="true">中</button>
+        <span aria-hidden="true">/</span>
+        <button type="button" data-locale="en" data-i18n-aria-label="accessibility.localeEnglish" aria-label="Switch to English" aria-pressed="false">EN</button>
+      </div>
+      <p class="onboarding-error onboarding-storage-error" id="onboardingStorageError" role="alert" aria-live="polite"></p>
+      <section class="onboarding-step" data-onboarding-stage="language" tabindex="-1">
+        <span class="onboarding-eyebrow" data-i18n="brand.tagline">with warmth</span>
+        <h2 id="firstUseTitle" data-i18n="onboarding.language.title">选择页面语言</h2>
+        <p data-i18n="onboarding.language.description">之后可以随时在设置中更改。</p>
+      </section>
+      <section class="onboarding-step onboarding-birthday" data-onboarding-stage="birthday" tabindex="-1" hidden>
+        <span class="onboarding-eyebrow" data-i18n="brand.tagline">with warmth</span>
+        <h2 data-i18n="onboarding.birthday.title">你的生日是什么时候？</h2>
+        <form id="onboardingBirthdayForm" novalidate>
+          <label for="onboardingBirthday" data-i18n="onboarding.birthday.label">生日</label>
+          <input id="onboardingBirthday" name="birthday" type="date" autocomplete="bday" aria-describedby="birthdayPrivacy birthdayError">
+          <p class="onboarding-privacy" id="birthdayPrivacy" data-i18n="onboarding.birthday.privacy">该隐私信息不会公开，仅用于年龄判断、人物设定和生日惊喜。</p>
+          <p class="onboarding-error" id="birthdayError" role="alert"></p>
+          <button class="onboarding-continue" type="submit" data-i18n="common.continue">继续</button>
+        </form>
+      </section>
+      <section class="onboarding-step" data-onboarding-stage="companion" tabindex="-1" hidden>
+        <div class="first-use-copy">
+          <span data-i18n="brand.tagline">with warmth</span>
+          <h2 data-i18n="onboarding.prompt">今天想和谁说说话？</h2>
+          <p data-i18n="onboarding.promptHint">先从一种陪伴开始，之后都可以慢慢调整。</p>
+        </div>
+        <div class="preset-glimpses" id="onboardingPresetList"></div>
+        <button class="first-use-custom" type="button" data-action="custom-companion" data-i18n="onboarding.createCustom">创建自己的角色</button>
+      </section>
+    </section>
   </div>
 
-  <dialog class="create-dialog" id="createDialog">
-    <form id="createForm" method="dialog">
+  <dialog class="create-dialog" id="createDialog" aria-labelledby="createDialogTitle">
+    <form id="createForm" method="dialog" novalidate>
       <div class="dialog-header">
         <div>
-          <h2>Create a companion</h2>
-          <p>Set the emotional role and the daily content habit.</p>
+          <span class="creation-eyebrow" data-i18n="brand.tagline">with warmth</span>
+          <h2 id="createDialogTitle" data-i18n="creation.title">创建一个陪伴角色</h2>
+          <p data-i18n="creation.subtitle">先决定最重要的部分，其余以后慢慢补充。</p>
         </div>
-        <button class="icon-button" id="closeCreateButton" type="button" aria-label="Close">x</button>
+        <button class="icon-button" id="closeCreateButton" type="button" data-i18n-aria-label="accessibility.closeDialog" aria-label="Close">x</button>
       </div>
 
-      <div class="form-grid">
-        <label>
-          Name
-          <input name="name" type="text" value="Mia" required>
-        </label>
-        <label>
-          Relationship
-          <select name="relationshipType">
-            <option>Girlfriend</option>
-            <option>Boyfriend</option>
-            <option>Bestie</option>
-            <option>Mentor</option>
-            <option>Tree hole</option>
-            <option>Knowledge brother</option>
-          </select>
-        </label>
-        <label class="wide">
-          Personality and tone
-          <input name="personality" type="text" value="Warm, playful, and emotionally supportive">
-        </label>
-        <label>
-          Practice language
-          <select name="language">
-            <option value="english">English</option>
-            <option value="japanese">Japanese 日本語</option>
-            <option value="korean">Korean 한국어</option>
-            <option value="french">French Français</option>
-            <option value="spanish">Spanish Español</option>
-            <option value="german">German Deutsch</option>
-            <option value="italian">Italian Italiano</option>
-          </select>
-        </label>
-        <label>
-          Push time
-          <input name="pushTime" type="time" value="08:00">
-        </label>
-        <label>
-          Max daily pushes
-          <input name="maxDaily" type="number" min="1" max="5" value="1">
-        </label>
-        <label>
-          Avatar style
-          <select name="avatarStyle">
-            <option>Soft anime portrait</option>
-            <option>Clean realistic portrait</option>
-            <option>Minimal illustrated portrait</option>
-            <option>Dreamy editorial portrait</option>
-          </select>
-        </label>
-        <label>
-          Emotional closeness
-          <select name="intimacyLevel">
-            <option value="gentle">Gentle</option>
-            <option value="close">Close</option>
-            <option value="deep">Deep</option>
-          </select>
-        </label>
-        <label>
-          Support mode
-          <select name="supportMode">
-            <option value="listen_first">Listen first</option>
-            <option value="gentle_advice">Gentle advice</option>
-            <option value="cheer_up">Cheer up</option>
-          </select>
-        </label>
-        <label>
-          Proactive care
-          <select name="proactiveCareFrequency">
-            <option value="sometimes">Sometimes</option>
-            <option value="daily">Daily</option>
-            <option value="rarely">Rarely</option>
-          </select>
-        </label>
-        <label>
-          Correction mode
-          <select name="correctionMode">
-            <option value="after_reply">After reply</option>
-            <option value="gentle_inline">Gentle inline</option>
-            <option value="off">Off</option>
-          </select>
-        </label>
-        <label>
-          Correction level
-          <select name="correctionIntensity">
-            <option value="light">Light</option>
-            <option value="balanced">Balanced</option>
-            <option value="detailed">Detailed</option>
-          </select>
-        </label>
-        <label>
-          Reply length
-          <select name="replyLength">
-            <option value="medium">Medium</option>
-            <option value="short">Short</option>
-            <option value="long">Long</option>
-          </select>
-        </label>
-        <label class="wide">
-          Custom keywords
-          <input name="customKeywords" type="text" value="cooking, travel" placeholder="cooking, travel, local cafes">
-        </label>
-      </div>
+      <ol class="creation-stepper" id="creationStepper" data-i18n-aria-label="creation.progress" aria-label="Creation progress" hidden></ol>
+      <h3 class="creation-step-heading" id="creationStepHeading" tabindex="-1" data-i18n="creation.quick.title">快速创建</h3>
+      <p class="creation-error" id="creationError" role="alert" aria-live="polite"></p>
 
-      <fieldset>
-        <legend>Daily push categories</legend>
-        <div class="checkbox-grid" id="categoryFields"></div>
-      </fieldset>
-
-      <fieldset>
-        <legend>Content source providers</legend>
-        <div class="checkbox-grid" id="providerFields">
-          <label>
-            <input type="checkbox" name="enabledProviders" value="youtube" checked>
-            YouTube videos
-          </label>
-          <label>
-            <input type="checkbox" name="enabledProviders" value="news" checked>
-            News APIs
-          </label>
-          <label>
-            <input type="checkbox" name="enabledProviders" value="reddit" checked>
-            Reddit trends
-          </label>
-          <label>
-            <input type="checkbox" name="enabledProviders" value="web_search" checked>
-            Web search
-          </label>
-        </div>
-      </fieldset>
-
-      <label class="memory-toggle">
-        <input name="memoryEnabled" type="checkbox" checked>
-        Remember important details as a local summary
-      </label>
-      <label class="memory-toggle">
-        <input name="naturalPhrases" type="checkbox" checked>
-        Suggest natural English phrases when useful
-      </label>
-
-      <section class="preview-panel" aria-label="Sample conversation preview">
-        <div class="preview-heading">
-          <h3>Sample conversation</h3>
-          <p>Preview how this companion will chat and share Daily Picks.</p>
-        </div>
-        <div id="companionPreview"></div>
+      <section class="quick-creation" id="quickCreation">
+        <label>
+          <span data-i18n="creation.template">陪伴模板</span>
+          <select name="presetId" id="creationPreset">
+            <option value="friend" data-i18n="preset.friend.name">知心朋友</option>
+            <option value="listener" data-i18n="preset.listener.name">安静倾听者</option>
+            <option value="traveler" data-i18n="preset.traveler.name">旅行伙伴</option>
+            <option value="workmate" data-i18n="preset.workmate.name">职场搭档</option>
+            <option value="coach" data-i18n="preset.coach.name">温柔语言教练</option>
+          </select>
+        </label>
+        <label>
+          <span data-i18n="creation.name">名字</span>
+          <input name="name" type="text" value="Mia" data-i18n-placeholder="creation.name.placeholder" required>
+        </label>
+        <label class="avatar-upload">
+          <span data-i18n="avatar.optionalLocal">选填，图片只在本机处理</span>
+          <span class="avatar-draft" id="avatarPreview" aria-live="polite"></span>
+          <input name="avatarFile" type="file" accept="image/png,image/jpeg,image/webp" aria-describedby="avatarError">
+          <span id="avatarError" role="alert"></span>
+        </label>
+        <button class="secondary-action" type="button" data-action="remove-avatar" data-i18n="avatar.remove">移除头像</button>
       </section>
 
+      <section class="advanced-creation" id="advancedCreation" hidden>
+        <section class="creation-step" data-creation-step="identity">
+          <label><span data-i18n="creation.name">名字</span><input name="advancedName" type="text" data-i18n-placeholder="creation.name.placeholder" required></label>
+          <label class="avatar-upload"><span data-i18n="avatar.optionalLocal">选填，图片只在本机处理</span><span class="avatar-draft" id="advancedAvatarPreview" aria-live="polite"></span><input name="advancedAvatarFile" type="file" accept="image/png,image/jpeg,image/webp" aria-describedby="advancedAvatarError"><span id="advancedAvatarError" role="alert"></span></label>
+          <button class="secondary-action" type="button" data-action="remove-avatar" data-i18n="avatar.remove">移除头像</button>
+          <fieldset class="visual-style-options">
+            <legend data-i18n="creation.avatarStyle">人物风格</legend>
+            <label data-visual-style="cinematic_semireal"><input type="radio" name="visualStyle" value="cinematic_semireal" checked> <span data-i18n="creation.visualStyle.cinematic">电影级半写实</span></label>
+            <label data-visual-style="digital_human" aria-disabled="true"><input type="radio" name="visualStyle" value="digital_human" disabled> <span data-i18n="creation.visualStyle.realistic">写实数字人</span> · <span data-i18n="common.comingSoon">即将开放</span></label>
+            <label data-visual-style="illustration" aria-disabled="true"><input type="radio" name="visualStyle" value="illustration" disabled> <span data-i18n="creation.visualStyle.illustrated">插画与二次元</span> · <span data-i18n="common.comingSoon">即将开放</span></label>
+          </fieldset>
+          <p class="creation-unavailable-status" id="currentVisualStatus" hidden></p>
+          <button class="coming-soon-card" type="button" disabled aria-disabled="true"><span data-i18n="creation.aiAvatar">AI 头像风格化</span><small data-i18n="common.comingSoon">即将开放</small></button>
+        </section>
+        <section class="creation-step" data-creation-step="relationship" hidden>
+          <label><span data-i18n="creation.relationship">关系</span><select name="relationshipType">
+            <option value="Girlfriend" data-i18n="enum.relationship.girlfriend">女朋友</option><option value="Boyfriend" data-i18n="enum.relationship.boyfriend">男朋友</option><option value="Bestie" data-i18n="enum.relationship.bestie">知心好友</option><option value="Mentor" data-i18n="enum.relationship.mentor">导师</option><option value="Tree hole" data-i18n="enum.relationship.treeHole">树洞倾听者</option><option value="Knowledge brother" data-i18n="enum.relationship.knowledgeBrother">知识型哥哥</option>
+          </select></label>
+        </section>
+        <section class="creation-step" data-creation-step="personality" hidden><label><span data-i18n="creation.personality">性格与语气</span><textarea name="personality" data-i18n-placeholder="creation.personality.placeholder">Warm, present, and easy to talk to</textarea></label></section>
+        <section class="creation-step" data-creation-step="story" hidden><label><span data-i18n="creation.backgroundStory">背景故事</span><textarea name="backgroundStory" data-i18n-placeholder="creation.backgroundStory.placeholder"></textarea></label></section>
+        <section class="creation-step" data-creation-step="language" hidden><label><span data-i18n="creation.practiceLanguage">练习语言</span><select name="language"><option value="english" data-i18n="enum.practiceLanguage.english">英语 English</option><option value="japanese" data-i18n="enum.practiceLanguage.japanese">日语 日本語</option><option value="korean" data-i18n="enum.practiceLanguage.korean">韩语 한국어</option><option value="french" data-i18n="enum.practiceLanguage.french">法语 Français</option><option value="spanish" data-i18n="enum.practiceLanguage.spanish">西班牙语 Español</option><option value="german" data-i18n="enum.practiceLanguage.german">德语 Deutsch</option><option value="italian" data-i18n="enum.practiceLanguage.italian">意大利语 Italiano</option></select></label></section>
+        <section class="creation-step" data-creation-step="voice_scene" hidden>
+          <label><span data-i18n="creation.scene">陪伴场景</span><select name="sceneId"><option value="friend_room" data-i18n="creation.scene.friendRoom">窗边客厅</option><option value="listener_rain" data-i18n="creation.scene.listenerRain">雨夜灯房</option><option value="traveler_train" data-i18n="creation.scene.travelerTrain">清晨列车</option><option value="workmate_desk" data-i18n="creation.scene.workmateDesk">暮色书桌</option><option value="coach_study" data-i18n="creation.scene.coachStudy">日光书房</option></select></label>
+          <label><span data-i18n="creation.voice">声音</span><select name="voiceId" disabled aria-disabled="true"><option value="" data-i18n="common.comingSoon">即将开放</option></select></label>
+          <p class="creation-unavailable-status" id="currentVoiceStatus" hidden></p>
+          <button class="coming-soon-card" type="button" disabled aria-disabled="true"><span data-i18n="creation.realtimeCall">实时语音通话</span><small data-i18n="common.comingSoon">即将开放</small></button>
+        </section>
+        <section class="creation-step creation-review" data-creation-step="review" hidden><div id="creationReview"></div></section>
+      </section>
+
+      <section class="preview-panel" id="creationPreviewPanel" data-i18n-aria-label="accessibility.sampleConversation" aria-label="Sample conversation preview"><div class="preview-heading"><h3 data-i18n="creation.preview.title">对话预览</h3><p data-i18n="creation.preview.description">感受这个角色会怎样与你聊天。</p></div><div id="companionPreview"></div></section>
       <div class="dialog-actions">
-        <button class="secondary-action" type="button" id="cancelCreateButton">Cancel</button>
-        <button class="primary-action" type="submit" id="saveCompanionButton">Create and chat</button>
+        <button class="secondary-action" type="button" id="cancelCreateButton" data-i18n="common.cancel">取消</button>
+        <button class="secondary-action" type="button" data-creation-action="quick" hidden data-i18n="creation.quick.title">快速创建</button>
+        <button class="secondary-action" type="button" data-creation-action="advanced" data-i18n="creation.advanced.open">进入高级自定义</button>
+        <button class="secondary-action" type="button" data-creation-action="back" hidden data-i18n="common.back">返回</button>
+        <button class="primary-action" type="button" data-creation-action="next" hidden data-i18n="common.next">下一步</button>
+        <button class="primary-action" type="submit" id="saveCompanionButton" data-i18n="creation.createAndChat">创建并开始聊天</button>
       </div>
     </form>
   </dialog>
@@ -207,47 +192,57 @@
     <form id="profileForm" method="dialog">
       <div class="dialog-header">
         <div>
-          <h2>Local profile</h2>
-          <p>This MVP stores your profile, companions, and chats in this browser only.</p>
+          <h2 data-i18n="profile.title">个人资料</h2>
+          <p data-i18n="profile.localNotice">未登录时，资料和聊天只保存在这个浏览器。</p>
         </div>
-        <button class="icon-button" id="closeProfileButton" type="button" aria-label="Close profile">x</button>
+        <button class="icon-button" id="closeProfileButton" type="button" data-i18n-aria-label="accessibility.closeProfile" aria-label="Close profile">x</button>
       </div>
 
       <div class="form-grid">
         <label>
-          Display name
+          <span data-i18n="profile.displayName">称呼</span>
           <input name="displayName" type="text" required>
         </label>
         <label>
-          Email
+          <span data-i18n="profile.email">邮箱</span>
           <input name="email" type="email" required>
+        </label>
+        <label class="wide">
+          <span data-i18n="profile.birthday">生日</span>
+          <input id="profileBirthday" name="birthday" type="date" autocomplete="bday" aria-describedby="profileBirthdayPrivacy profileBirthdayError">
+          <span id="profileBirthdayPrivacy" data-i18n="onboarding.birthday.privacy">该隐私信息不会公开，仅用于年龄判断、人物设定和生日惊喜。</span>
+          <span class="onboarding-error" id="profileBirthdayError" role="alert"></span>
         </label>
       </div>
 
       <fieldset>
-        <legend>Privacy</legend>
+        <legend data-i18n="profile.privacy">隐私</legend>
         <label class="memory-toggle">
           <input name="localOnly" type="checkbox" checked disabled>
-          Store data locally in this browser
+          <span data-i18n="common.localOnly">仅保存在本机</span>
         </label>
         <label class="memory-toggle">
           <input name="allowAiTraining" type="checkbox">
-          Allow future AI training use
+          <span data-i18n="profile.training">允许未来用于 AI 训练</span>
         </label>
         <label class="memory-toggle">
           <input name="showPrivacyNotice" type="checkbox" checked>
-          Show privacy notice in the studio
+          <span data-i18n="profile.localNotice">未登录时，资料和聊天只保存在这个浏览器。</span>
         </label>
       </fieldset>
 
       <div class="dialog-actions">
-        <button class="secondary-action" type="button" id="cancelProfileButton">Cancel</button>
-        <button class="primary-action" type="submit">Save profile</button>
+        <button class="secondary-action" type="button" id="cancelProfileButton" data-i18n="common.cancel">取消</button>
+        <button class="primary-action" type="submit" data-i18n="profile.save">保存资料</button>
       </div>
     </form>
   </dialog>
 
-  <button class="translate-trigger" id="translateTrigger" type="button" hidden>译 Translate</button>
+  <div class="translate-trigger language-action-menu" id="translateTrigger" hidden role="toolbar" data-i18n-aria-label="accessibility.languageActions" aria-label="Language actions">
+    <button type="button" data-language-action="translate" data-i18n="languageAction.translate">翻译</button>
+    <button type="button" data-language-action="natural" data-i18n="languageAction.natural">更自然</button>
+    <button type="button" data-language-action="speak" data-i18n="languageAction.speak">朗读</button>
+  </div>
   <aside class="translate-popover" id="translatePopover" hidden aria-live="polite"></aside>
 
   <script type="module" src="src/app.js"></script>

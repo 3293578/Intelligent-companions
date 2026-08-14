@@ -21,7 +21,7 @@ function countEntries(profile) {
 }
 
 export function createMemoryProxyHandler(options = {}) {
-  return async function handleMemoryProxy(request, companionId) {
+  return async function handleMemoryProxy(request, companionId, publicCompanionId = companionId) {
     if (!['GET', 'DELETE'].includes(request.method)) {
       return jsonResponse({ error: 'Memory endpoint expects GET or DELETE requests.' }, 405);
     }
@@ -36,7 +36,7 @@ export function createMemoryProxyHandler(options = {}) {
       ? await options.memoryStore.clearProfile(companionId)
       : await options.memoryStore.getProfile(companionId);
     return jsonResponse({
-      companionId,
+      companionId: publicCompanionId,
       entryCount: countEntries(profile),
       approxBytes: profile.approxBytes || 0,
       promptSummary: formatMemoryForPrompt(profile),

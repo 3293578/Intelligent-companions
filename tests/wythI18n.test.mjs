@@ -37,6 +37,10 @@ test('catalog covers every current and planned user-facing surface', () => {
     'settings.language',
     'settings.reduceMotion',
     'settings.full.privacy',
+    'settings.quick.readingMode',
+    'announcement.modelSwitchTitle',
+    'announcement.modelSwitchBody',
+    'settings.status.active',
     'vocabulary.title',
     'languageAction.translate',
     'model.runtime.title',
@@ -276,4 +280,36 @@ test('interpolates values without rewriting user content or unresolved placehold
   assert.equal(t('en', 'chat.replying', { name: '<Mia & You>' }), '<Mia & You> is replying…');
   assert.equal(t('en', 'accessibility.removeWord'), 'Remove {word}');
   assert.equal(t('en', 'chat.replying', null), '{name} is replying…');
+});
+
+test('catalog contains the first-use gate and profile-completion language', () => {
+  const requiredKeys = [
+    'onboarding.language.title',
+    'onboarding.language.description',
+    'onboarding.birthday.title',
+    'onboarding.birthday.label',
+    'onboarding.birthday.privacy',
+    'onboarding.birthday.invalid',
+    'onboarding.birthday.future',
+    'onboarding.birthday.ageRange',
+    'onboarding.prompt',
+    'onboarding.promptHint',
+    'onboarding.existingUserPrompt'
+  ];
+
+  for (const key of requiredKeys) {
+    assert.equal(typeof WYTH_LOCALES.en.strings[key], 'string', `missing English key: ${key}`);
+    assert.equal(typeof WYTH_LOCALES['zh-CN'].strings[key], 'string', `missing Chinese key: ${key}`);
+  }
+});
+
+test('translated option labels keep canonical stored IDs outside the catalog', () => {
+  const canonicalIds = {
+    relationship: ['Girlfriend', 'Boyfriend', 'Bestie', 'Mentor', 'Tree hole', 'Knowledge brother'],
+    avatarStyle: ['Soft anime portrait', 'Clean realistic portrait', 'Minimal illustrated portrait', 'Dreamy editorial portrait']
+  };
+
+  for (const [group, ids] of Object.entries(canonicalIds)) {
+    for (const id of ids) assert.equal(typeof ID_TO_TRANSLATION_KEY[group][id], 'string');
+  }
 });

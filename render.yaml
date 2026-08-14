@@ -1,0 +1,32 @@
+services:
+  - type: web
+    name: wyth-staging
+    runtime: node
+    plan: free
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeployTrigger: off
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NO_LOCAL_PROXY_FALLBACK
+        value: "1"
+      - key: ALLOW_LOCAL_FALLBACK
+        value: "0"
+      - key: ALLOW_MODEL_CONFIG_ENDPOINT
+        value: "0"
+      - key: LLM_PROVIDER
+        value: deepseek
+      - key: LLM_MODEL
+        value: deepseek-chat
+      - key: APP_ORIGIN
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: AUTH_RECOVERY_SECRET
+        sync: false
+      - key: DEEPSEEK_API_KEY
+        sync: false

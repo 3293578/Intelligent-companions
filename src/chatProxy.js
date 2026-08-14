@@ -105,12 +105,15 @@ export function createChatProxyHandler(options = {}) {
       let memoryProfile = null;
       if (companion.memoryEnabled && options.memoryStore) {
         try {
-          memoryProfile = await options.memoryStore.remember(companion.id, userMessage);
+          const memoryId = options.memoryKeyProvider?.(request, companion.id) || companion.id;
+          memoryProfile = await options.memoryStore.remember(memoryId, userMessage);
         } catch (error) {
           options.onMemoryError?.(error);
         }
       }
       const llmClient = resolveLlmClient(options);
+      let llmFailed = false;
+      let lastLlmError = null;
       if (typeof llmClient === 'function') {
         try {
           const messages = toLlmMessages(companion, userMessage, priorMessages, memoryProfile);
@@ -124,9 +127,18 @@ export function createChatProxyHandler(options = {}) {
             });
           }
         } catch (error) {
+          llmFailed = true;
+          lastLlmError = error;
           options.onLlmError?.(error);
-          // Fall through to deterministic local behavior.
         }
+      }
+
+      if (llmFailed && options.allowLocalFallback === false) {
+        return jsonResponse({
+          error: 'model_unavailable',
+          retryable: true,
+          ...(lastLlmError?.requestId ? { requestId: lastLlmError.requestId } : {})
+        }, 503);
       }
 
       return jsonResponse({

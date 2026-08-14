@@ -55,6 +55,13 @@ test('public model config reports key availability without exposing secrets', ()
   assert.equal(JSON.stringify(config).includes('secret'), false);
 });
 
+test('stored server keys override environment keys without entering public config', () => {
+  const selection = normalizeModelSelection({ provider: 'deepseek' });
+  const config = publicModelConfig(selection, { DEEPSEEK_API_KEY: '' }, { deepseek: 'stored-secret' });
+  assert.equal(config.configured, true);
+  assert.equal(JSON.stringify(config).includes('stored-secret'), false);
+});
+
 test('deepseek selection always locks api mode to chat completions', () => {
   const selection = normalizeModelSelection({
     provider: 'deepseek',

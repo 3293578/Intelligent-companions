@@ -1,6 +1,7 @@
 import { recommendSceneId, sceneForId } from './sceneCatalog.js';
 import { calculateAge, normalizeBirthday } from './onboardingState.js';
 import { normalizeLocale } from './wythI18n.js';
+import { assessSupportSignal } from './emotionSupport.js';
 
 const DEFAULT_CATEGORIES = ['funny_videos', 'world_news', 'tech_news'];
 const DEFAULT_CONTENT_PROVIDERS = ['youtube', 'news', 'reddit', 'web_search'];
@@ -44,6 +45,21 @@ const LANGUAGE_LIBRARY = {
 };
 
 const DEFAULT_LANGUAGE = 'english';
+const VISUAL_STYLES = new Set(['cinematic_semireal', 'digital_human', 'illustration']);
+const SCHEDULE_TIME_PATTERN = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
+
+function normalizePushTime(value) {
+  return SCHEDULE_TIME_PATTERN.test(String(value || '')) ? String(value) : '08:00';
+}
+
+function normalizeMaxDaily(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.min(5, Math.max(1, Math.trunc(number))) : 1;
+}
+
+function normalizeVisualStyle(value) {
+  return VISUAL_STYLES.has(value) ? value : 'cinematic_semireal';
+}
 
 const CATEGORY_LIBRARY = {
   funny_videos: {
@@ -390,7 +406,10 @@ export function createCompanion(input = {}) {
     name,
     relationshipType: input.relationshipType || 'Bestie',
     personality: input.personality || 'Warm, curious, and encouraging',
+    backgroundStory: String(input.backgroundStory || '').trim(),
     language: normalizeLanguage(input.language),
+    visualStyle: normalizeVisualStyle(input.visualStyle),
+    voiceId: String(input.voiceId || '').trim(),
     avatarStyle: input.avatarStyle || 'Soft portrait',
     avatarColor: input.avatarColor || AVATAR_COLORS[name.length % AVATAR_COLORS.length],
     sceneId: sceneForId(input.sceneId || recommendSceneId(input)).id,
@@ -401,9 +420,9 @@ export function createCompanion(input = {}) {
       enabledProviders: normalizeProviders(input.contentSources?.enabledProviders)
     },
     pushSchedule: {
-      time: input.pushTime || input.pushSchedule?.time || '08:00',
-      timezone: input.timezone || input.pushSchedule?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'Local',
-      maxDaily: Number(input.maxDaily || input.pushSchedule?.maxDaily || 1)
+      time: normalizePushTime(input.pushTime || input.pushSchedule?.time),
+      timezone: 'Local',
+      maxDaily: normalizeMaxDaily(input.maxDaily ?? input.pushSchedule?.maxDaily)
     },
     careStyle: normalizeCareStyle(input.careStyle),
     practiceStyle: normalizePracticeStyle(input.practiceStyle),
@@ -471,7 +490,7 @@ function isUnsafeContent(raw) {
 export function normalizeRetrievedContent(provider, raw = {}, context = {}) {
   const url = raw.url || raw.link || raw.permalink || raw.videoUrl;
   const title = String(raw.title || raw.name || '').trim();
-  if (!url || !title) return null;
+  if (!url || !title || !/^https?:\/\//i.test(String(url))) return null;
   if (raw.safety && raw.safety !== 'safe') return null;
   if (isUnsafeContent(raw)) return null;
 
@@ -570,15 +589,20 @@ function hasNegativeEmotion(content) {
   return detectUserEmotion(content).valence === 'negative';
 }
 
-function negativeSupportLine(companion) {
+function negativeSupportLine(companion, content = '') {
   const mode = companion.careStyle?.supportMode || DEFAULT_CARE_STYLE.supportMode;
+  const acknowledgement = /exhausted|drained|tired|burn(?:ed|t)|累|疲惫/i.test(content)
+    ? 'I hear how exhausted you feel.'
+    : /sad|upset|cry|hurt|伤心|难过/i.test(content)
+      ? 'That sounds heavy to carry.'
+      : 'That sounds like a lot to be holding.';
   if (mode === 'gentle_advice') {
-    return 'Let us try one small step together: name the hardest part, then choose one tiny action you can actually do.';
+    return `${acknowledgement} If it helps, we can name the hardest part and try one small step together.`;
   }
   if (mode === 'cheer_up') {
-    return 'I want to lift you a little: find one tiny win from today, even if it is just getting through it, and let me hold that smile with you.';
+    return `${acknowledgement} Getting through it counts; we can look for one tiny win or softer moment when you are ready.`;
   }
-  return 'I can just listen first. Tell me more about the part that felt heaviest, and I will not rush to fix you.';
+  return `${acknowledgement} I can just listen first; you do not have to make it neat for me.`;
 }
 
 function everydaySupportLine(companion) {
@@ -663,17 +687,22 @@ export function buildCompanionSystemPrompt(companion) {
 export function createAssistantReply(companion, userMessage, priorMessages = []) {
   const content = userMessage.content || '';
   const emotion = detectUserEmotion(content);
+  const support = assessSupportSignal([
+    ...priorMessages,
+    userMessage
+  ], { emotion });
 
   if (hasNegativeEmotion(content)) {
     const reply = createAssistantMessage(
       companion.id,
-      `${companion.name} here. I am here with you, and you are not alone in this. ${negativeSupportLine(companion)}`
+      `${companion.name} here. I am here with you. ${negativeSupportLine(companion, content)}`
     );
     return {
       ...reply,
       metadata: {
         ...(reply.metadata || {}),
-        emotion
+        emotion,
+        support
       }
     };
   }
@@ -686,7 +715,8 @@ export function createAssistantReply(companion, userMessage, priorMessages = [])
     ...reply,
     metadata: {
       ...(reply.metadata || {}),
-      emotion
+      emotion,
+      support
     }
   };
 }
@@ -801,10 +831,19 @@ export function updateCompanion(companion, updates = {}) {
     name: String(updates.name ?? companion.name).trim() || companion.name,
     relationshipType: updates.relationshipType ?? companion.relationshipType,
     personality: updates.personality ?? companion.personality,
+    backgroundStory: Object.hasOwn(updates, 'backgroundStory')
+      ? String(updates.backgroundStory || '').trim()
+      : String(companion.backgroundStory || '').trim(),
     language: Object.hasOwn(updates, 'language')
       ? normalizeLanguage(updates.language)
       : normalizeLanguage(companion.language),
     avatarStyle: updates.avatarStyle ?? companion.avatarStyle,
+    visualStyle: Object.hasOwn(updates, 'visualStyle')
+      ? normalizeVisualStyle(updates.visualStyle)
+      : normalizeVisualStyle(companion.visualStyle),
+    voiceId: Object.hasOwn(updates, 'voiceId')
+      ? String(updates.voiceId || '').trim()
+      : String(companion.voiceId || '').trim(),
     avatarColor: updates.avatarColor ?? companion.avatarColor,
     sceneId: sceneForId(updates.sceneId ?? companion.sceneId ?? recommendSceneId({
       relationshipType: updates.relationshipType ?? companion.relationshipType,
@@ -824,9 +863,9 @@ export function updateCompanion(companion, updates = {}) {
     practiceStyle: nextPracticeStyle,
     pushSchedule: {
       ...companion.pushSchedule,
-      time: updates.pushTime ?? updates.pushSchedule?.time ?? companion.pushSchedule.time,
-      timezone: updates.timezone ?? updates.pushSchedule?.timezone ?? companion.pushSchedule.timezone,
-      maxDaily: Number(updates.maxDaily ?? updates.pushSchedule?.maxDaily ?? companion.pushSchedule.maxDaily)
+      time: normalizePushTime(updates.pushTime ?? updates.pushSchedule?.time ?? companion.pushSchedule.time),
+      timezone: 'Local',
+      maxDaily: normalizeMaxDaily(updates.maxDaily ?? updates.pushSchedule?.maxDaily ?? companion.pushSchedule.maxDaily)
     },
     memoryEnabled: Object.prototype.hasOwnProperty.call(updates, 'memoryEnabled')
       ? Boolean(updates.memoryEnabled)
@@ -845,9 +884,17 @@ function parseHourMinute(value) {
   return (hour * 60) + (minute || 0);
 }
 
-function isInsideQuietHours(nowDate, quietHours) {
+function shiftedCalendarDate(value, timezoneOffsetMinutes = 0) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (!Number.isFinite(date.getTime())) return null;
+  return new Date(date.getTime() + Number(timezoneOffsetMinutes || 0) * 60 * 1000);
+}
+
+function isInsideQuietHours(nowDate, quietHours, timezoneOffsetMinutes = 0) {
   if (!quietHours?.enabled) return false;
-  const current = (nowDate.getHours() * 60) + nowDate.getMinutes();
+  const shifted = shiftedCalendarDate(nowDate, timezoneOffsetMinutes);
+  if (!shifted) return false;
+  const current = (shifted.getUTCHours() * 60) + shifted.getUTCMinutes();
   const start = parseHourMinute(quietHours.start);
   const end = parseHourMinute(quietHours.end);
   if (start === end) return true;
@@ -861,7 +908,7 @@ export function previewNotification(companion, pushMessage, preferences = {}) {
   }
 
   const now = preferences.now ? new Date(preferences.now) : new Date();
-  if (isInsideQuietHours(now, preferences.quietHours)) {
+  if (isInsideQuietHours(now, preferences.quietHours, preferences.timezoneOffsetMinutes)) {
     return { muted: true, reason: 'Muted during quiet hours.', title: '', body: '' };
   }
 
@@ -876,46 +923,68 @@ export function previewNotification(companion, pushMessage, preferences = {}) {
   };
 }
 
-function dateKey(value) {
-  return new Date(value).toISOString().slice(0, 10);
+function dateKey(value, timezoneOffsetMinutes = 0) {
+  const shifted = shiftedCalendarDate(value, timezoneOffsetMinutes);
+  return shifted ? shifted.toISOString().slice(0, 10) : null;
 }
 
-function countDailyPushes(messages, companionId, now) {
-  const today = dateKey(now);
+function countDailyPushes(messages, companionId, now, timezoneOffsetMinutes = 0) {
+  const today = dateKey(now, timezoneOffsetMinutes);
   return messages.filter((message) => (
     message.companionId === companionId
     && message.role === 'system_push'
-    && dateKey(message.createdAt) === today
+    && dateKey(message.createdAt, timezoneOffsetMinutes) === today
   )).length;
 }
 
-function countDailyCareCheckIns(messages, companionId, now) {
-  const today = dateKey(now);
+function countDailyCareCheckIns(messages, companionId, now, timezoneOffsetMinutes = 0) {
+  const today = dateKey(now, timezoneOffsetMinutes);
   return messages.filter((message) => (
     message.companionId === companionId
     && message.role === 'assistant'
     && message.metadata?.kind === 'care_check_in'
-    && dateKey(message.createdAt) === today
+    && dateKey(message.createdAt, timezoneOffsetMinutes) === today
   )).length;
 }
 
-function scheduleHasArrived(companion, now) {
-  const current = (now.getHours() * 60) + now.getMinutes();
+function scheduleHasArrived(companion, now, timezoneOffsetMinutes = 0) {
+  const shifted = shiftedCalendarDate(now, timezoneOffsetMinutes);
+  if (!shifted) return false;
+  const current = (shifted.getUTCHours() * 60) + shifted.getUTCMinutes();
   return current >= parseHourMinute(companion.pushSchedule.time);
 }
 
-function shouldRunCareCheckIn(companion, now) {
-  const frequency = companion.careStyle?.proactiveCareFrequency || DEFAULT_CARE_STYLE.proactiveCareFrequency;
-  if (frequency === 'rarely') return false;
+function latestCareCheckIn(messages, companionId) {
+  return messages
+    .filter((message) => message.companionId === companionId && message.metadata?.kind === 'care_check_in' && Number.isFinite(new Date(message.createdAt).getTime()))
+    .sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt))[0];
+}
+
+function shouldRunCareCheckIn(companion, now, override, messages = []) {
+  const frequency = override || companion.careStyle?.proactiveCareFrequency || DEFAULT_CARE_STYLE.proactiveCareFrequency;
+  if (frequency === 'off') return false;
+  if (frequency === 'rarely' || frequency === 'sometimes') {
+    const previous = latestCareCheckIn(messages, companion.id);
+    const previousTime = previous ? new Date(previous.createdAt).getTime() : NaN;
+    const createdTime = new Date(companion.createdAt).getTime();
+    const anchor = Number.isFinite(previousTime) && previousTime <= now.getTime()
+      ? previousTime
+      : Number.isFinite(createdTime) && createdTime <= now.getTime()
+        ? createdTime
+        : null;
+    if (!anchor) return true;
+    const days = frequency === 'rarely' ? 7 : 2;
+    return now.getTime() - anchor >= days * 24 * 60 * 60 * 1000;
+  }
   if (frequency === 'daily') return true;
-  return now.getDate() % 2 === 0;
+  return false;
 }
 
 export function companionsDueForPush(state, options = {}) {
   const now = options.now ? new Date(options.now) : new Date();
   return state.companions.filter((companion) => {
-    if (!scheduleHasArrived(companion, now)) return false;
-    return countDailyPushes(state.messages, companion.id, now) < companion.pushSchedule.maxDaily;
+    if (!scheduleHasArrived(companion, now, options.timezoneOffsetMinutes)) return false;
+    return countDailyPushes(state.messages, companion.id, now, options.timezoneOffsetMinutes) < companion.pushSchedule.maxDaily;
   });
 }
 
@@ -925,18 +994,23 @@ export function runScheduledDailyPushes(state, options = {}) {
   const newMessages = [];
 
   for (const companion of state.companions) {
-    if (shouldRunCareCheckIn(companion, now)) {
-      const sentCheckIns = countDailyCareCheckIns([...state.messages, ...newMessages], companion.id, now);
+    const quiet = isInsideQuietHours(now, options.notificationPreferences?.quietHours, options.timezoneOffsetMinutes);
+    if (!quiet && shouldRunCareCheckIn(companion, now, options.proactiveContactOverride, [...state.messages, ...newMessages])) {
+      const sentCheckIns = countDailyCareCheckIns([...state.messages, ...newMessages], companion.id, now, options.timezoneOffsetMinutes);
       if (sentCheckIns === 0) {
         const checkIn = createCareCheckIn(companion, now);
         newMessages.push(checkIn);
-        const notification = previewNotification(companion, checkIn, options.notificationPreferences || {});
+        const notification = previewNotification(companion, checkIn, {
+          ...(options.notificationPreferences || {}),
+          now: now.toISOString(),
+          timezoneOffsetMinutes: options.timezoneOffsetMinutes
+        });
         if (!notification.muted) notifications.push(notification);
       }
     }
 
-    if (!scheduleHasArrived(companion, now)) continue;
-    const sentToday = countDailyPushes([...state.messages, ...newMessages], companion.id, now);
+    if (!scheduleHasArrived(companion, now, options.timezoneOffsetMinutes)) continue;
+    const sentToday = countDailyPushes([...state.messages, ...newMessages], companion.id, now, options.timezoneOffsetMinutes);
     if (sentToday >= companion.pushSchedule.maxDaily) continue;
 
     const sources = options.sourcesByCompanion?.[companion.id];
@@ -947,7 +1021,11 @@ export function runScheduledDailyPushes(state, options = {}) {
     });
     newMessages.push(push);
 
-    const notification = previewNotification(companion, push, options.notificationPreferences || {});
+    const notification = previewNotification(companion, push, {
+      ...(options.notificationPreferences || {}),
+      now: now.toISOString(),
+      timezoneOffsetMinutes: options.timezoneOffsetMinutes
+    });
     if (!notification.muted) notifications.push(notification);
   }
 
@@ -1075,6 +1153,19 @@ export function createSeedState() {
   };
 }
 
+export function hasSchedulerStateChanged(previous, next) {
+  return previous.messages.length !== next.messages.length || previous.companions.length !== next.companions.length;
+}
+
+export function createEmptyState() {
+  return {
+    user: cloneDefaultUser(),
+    selectedCompanionId: '',
+    companions: [],
+    messages: []
+  };
+}
+
 export function serializeState(state) {
   return JSON.stringify(state);
 }
@@ -1091,6 +1182,9 @@ export function deserializeState(raw, now = localCalendarDate()) {
       companions: parsed.companions.map((companion) => ({
         ...companion,
         language: normalizeLanguage(companion.language),
+        backgroundStory: String(companion.backgroundStory || '').trim(),
+        visualStyle: normalizeVisualStyle(companion.visualStyle),
+        voiceId: String(companion.voiceId || '').trim(),
         sceneId: sceneForId(companion.sceneId || recommendSceneId(companion)).id,
         avatar: normalizeAvatar(companion.avatar),
         customKeywords: companion.customKeywords || [],
@@ -1098,7 +1192,12 @@ export function deserializeState(raw, now = localCalendarDate()) {
           enabledProviders: normalizeProviders(companion.contentSources?.enabledProviders)
         },
         careStyle: normalizeCareStyle(companion.careStyle),
-        practiceStyle: normalizePracticeStyle(companion.practiceStyle)
+        practiceStyle: normalizePracticeStyle(companion.practiceStyle),
+        pushSchedule: {
+          time: normalizePushTime(companion.pushSchedule?.time),
+          timezone: 'Local',
+          maxDaily: normalizeMaxDaily(companion.pushSchedule?.maxDaily)
+        }
       }))
     };
   } catch {

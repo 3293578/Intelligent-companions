@@ -4,6 +4,8 @@ node_modules/
 .agents/
 .worktrees/
 .env
+.env.staging
+.env.production
 .env.local
 .env.*.local
 .git.broken-*

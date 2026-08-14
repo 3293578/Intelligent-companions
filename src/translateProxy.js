@@ -1,4 +1,4 @@
-const MAX_TEXT_LENGTH = 280;
+const MAX_TEXT_LENGTH = 2_000;
 const MAX_CONTEXT_LENGTH = 600;
 
 export async function parseTranslateProxyRequest(request) {

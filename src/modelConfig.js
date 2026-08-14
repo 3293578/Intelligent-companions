@@ -1,7 +1,7 @@
 const MODEL_PROVIDER_PRESETS = {
   deepseek: {
     label: 'DeepSeek',
-    defaultModel: 'deepseek-v4-flash',
+    defaultModel: 'deepseek-chat',
     baseUrl: 'https://api.deepseek.com',
     apiMode: 'chat_completions',
     keyEnv: 'DEEPSEEK_API_KEY'
@@ -47,22 +47,23 @@ export function normalizeModelSelection(input = {}) {
   };
 }
 
-export function apiKeyForSelection(selection, env = process.env) {
+export function apiKeyForSelection(selection, env = process.env, storedApiKeys = {}) {
   const preset = MODEL_PROVIDER_PRESETS[selection.provider] || MODEL_PROVIDER_PRESETS.deepseek;
+  if (storedApiKeys[selection.provider]) return storedApiKeys[selection.provider];
   if (selection.provider === 'openai_compatible') {
     return env.LLM_API_KEY || env.DEEPSEEK_API_KEY || env.OPENAI_API_KEY || '';
   }
   return env[preset.keyEnv] || '';
 }
 
-export function publicModelConfig(selection, env = process.env) {
+export function publicModelConfig(selection, env = process.env, storedApiKeys = {}) {
   const normalized = normalizeModelSelection(selection);
   const preset = MODEL_PROVIDER_PRESETS[normalized.provider];
   return {
     ...normalized,
     label: preset.label,
     keyEnv: preset.keyEnv,
-    configured: Boolean(apiKeyForSelection(normalized, env))
+    configured: Boolean(apiKeyForSelection(normalized, env, storedApiKeys))
   };
 }
 

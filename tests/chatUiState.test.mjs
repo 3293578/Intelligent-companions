@@ -32,7 +32,7 @@ test('clears pending state only for the matching companion request', () => {
   assert.equal(completeChatSend(pending, 'companion_luna').pendingCompanionId, null);
 });
 
-test('adds a temporary pending message to the active companion transcript', () => {
+test('adds a nonverbal temporary pending indicator to the active companion transcript', () => {
   const messages = [
     {
       id: 'msg_user',
@@ -51,7 +51,7 @@ test('adds a temporary pending message to the active companion transcript', () =
   assert.equal(rendered.length, 2);
   assert.equal(rendered[1].role, 'assistant_pending');
   assert.equal(rendered[1].companionId, 'companion_luna');
-  assert.match(rendered[1].content, /thinking/i);
+  assert.equal(rendered[1].content, '');
 });
 
 test('does not show pending message on other companions', () => {
@@ -93,13 +93,13 @@ test('creates message-level save and unsubscribe actions for daily push categori
     {
       action: 'save-pick',
       category: 'funny_videos',
-      label: 'Save pick',
+      labelKey: 'dailyPick.save',
       disabled: false
     },
     {
       action: 'stop-category',
       category: 'funny_videos',
-      label: 'Stop this type',
+      labelKey: 'dailyPick.stopCategory',
       disabled: false
     }
   ]);
@@ -120,7 +120,7 @@ test('disables daily push unsubscribe when it would remove the final category', 
 
   assert.equal(actions[0].action, 'save-pick');
   assert.equal(actions[1].disabled, true);
-  assert.equal(actions[1].label, 'Only category left');
+  assert.equal(actions[1].labelKey, 'dailyPick.categoryMinimum');
 });
 
 test('counts unread assistant and daily push messages since a companion was last read', () => {

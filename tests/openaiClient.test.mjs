@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  compactMessagesForRetry,
   createOpenAIResponsesClient,
   extractResponseText,
   resolveLlmConfig
@@ -182,4 +183,150 @@ test('OpenAI Responses client returns empty text on API failure', async () => {
     client([{ role: 'user', content: 'Hi' }]),
     /LLM request failed with 401 at https:\/\/api\.deepseek\.com\/chat\/completions/
   );
+});
+
+test('LLM client preserves a safe provider error reason for diagnostics', async () => {
+  const client = createOpenAIResponsesClient({
+    apiKey: 'secret-that-must-not-leak',
+    fetchImpl: async () => ({
+      ok: false,
+      status: 400,
+      json: async () => ({
+        error: {
+          code: 'invalid_request_error',
+          message: 'Requested model is not available.'
+        }
+      })
+    })
+  });
+
+  await assert.rejects(
+    client([{ role: 'user', content: 'Hi' }]),
+    (error) => {
+      assert.equal(error.status, 400);
+      assert.equal(error.code, 'invalid_request_error');
+      assert.match(error.message, /Requested model is not available/);
+      assert.doesNotMatch(error.message, /secret-that-must-not-leak/);
+      return true;
+    }
+  );
+});
+
+test('LLM client retries a context-length failure with bounded recent messages', async () => {
+  const calls = [];
+  const client = createOpenAIResponsesClient({
+    apiKey: 'test-key',
+    maxInputCharacters: 120,
+    fetchImpl: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      if (calls.length === 1) {
+        return {
+          ok: false,
+          status: 400,
+          json: async () => ({ error: { code: 'context_length_exceeded', message: 'Context length exceeded.' } })
+        };
+      }
+      return {
+        ok: true,
+        json: async () => ({ choices: [{ message: { content: 'Recovered reply.' } }] })
+      };
+    }
+  });
+
+  const text = await client([
+    { role: 'system', content: `instructions ${'x'.repeat(90)}` },
+    { role: 'user', content: `old ${'a'.repeat(80)}` },
+    { role: 'assistant', content: `older ${'b'.repeat(80)}` },
+    { role: 'user', content: 'latest message' }
+  ]);
+
+  assert.equal(text, 'Recovered reply.');
+  assert.equal(calls.length, 2);
+  assert.ok(JSON.stringify(calls[1].messages).length < JSON.stringify(calls[0].messages).length);
+  assert.equal(calls[1].messages.at(-1).content, 'latest message');
+});
+
+test('LLM client retries one transient provider failure', async () => {
+  let attempts = 0;
+  const client = createOpenAIResponsesClient({
+    apiKey: 'test-key',
+    retryDelayMs: 0,
+    fetchImpl: async () => {
+      attempts += 1;
+      if (attempts === 1) {
+        return {
+          ok: false,
+          status: 429,
+          json: async () => ({ error: { code: 'rate_limit', message: 'Try again.' } })
+        };
+      }
+      return {
+        ok: true,
+        json: async () => ({ choices: [{ message: { content: 'Recovered after retry.' } }] })
+      };
+    }
+  });
+
+  assert.equal(await client([{ role: 'user', content: 'Hi' }]), 'Recovered after retry.');
+  assert.equal(attempts, 2);
+});
+
+test('LLM client retries transient fetch failures until the network recovers', async () => {
+  let attempts = 0;
+  const client = createOpenAIResponsesClient({
+    apiKey: 'test-key',
+    maxAttempts: 3,
+    retryDelayMs: 0,
+    fetchImpl: async () => {
+      attempts += 1;
+      if (attempts < 3) {
+        const cause = new Error('socket disconnected before secure TLS connection');
+        cause.code = 'ECONNRESET';
+        throw new TypeError('fetch failed', { cause });
+      }
+      return {
+        ok: true,
+        json: async () => ({ choices: [{ message: { content: 'Recovered network reply.' } }] })
+      };
+    }
+  });
+
+  assert.equal(await client([{ role: 'user', content: 'Hi' }]), 'Recovered network reply.');
+  assert.equal(attempts, 3);
+});
+
+test('LLM network errors preserve a safe cause code after retries are exhausted', async () => {
+  const client = createOpenAIResponsesClient({
+    apiKey: 'test-key',
+    maxAttempts: 2,
+    retryDelayMs: 0,
+    fetchImpl: async () => {
+      const cause = new Error('getaddrinfo EAI_AGAIN api.deepseek.com');
+      cause.code = 'EAI_AGAIN';
+      throw new TypeError('fetch failed', { cause });
+    }
+  });
+
+  await assert.rejects(
+    client([{ role: 'user', content: 'Hi' }]),
+    (error) => {
+      assert.equal(error.code, 'EAI_AGAIN');
+      assert.equal(error.attempts, 2);
+      assert.match(error.message, /network request failed/i);
+      return true;
+    }
+  );
+});
+
+test('message compaction keeps the system instruction and newest turn', () => {
+  const compacted = compactMessagesForRetry([
+    { role: 'system', content: `system ${'s'.repeat(100)}` },
+    { role: 'user', content: `old ${'o'.repeat(100)}` },
+    { role: 'assistant', content: `middle ${'m'.repeat(100)}` },
+    { role: 'user', content: 'newest' }
+  ], 80);
+
+  assert.equal(compacted[0].role, 'system');
+  assert.equal(compacted.at(-1).content, 'newest');
+  assert.ok(compacted.reduce((total, message) => total + message.content.length, 0) <= 80);
 });

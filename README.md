@@ -158,3 +158,21 @@ Released under the MIT License. See [LICENSE](LICENSE).
 - Richer companion profiles and onboarding
 - Better content ranking and source controls
 - Mobile-first polish and deployable hosting setup (PWA, then Capacitor packaging)
+# Wyth
+
+## Local preview
+
+From any PowerShell directory, run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File "D:\Intelligent AI Agent\.worktrees\wyth-cinematic-ui\scripts\preview.ps1"
+```
+
+Keep that PowerShell window open while reviewing `http://127.0.0.1:53128/`.
+The readiness check is `http://127.0.0.1:53128/api/health`.
+
+For ordinary use, double-click `Start-Wyth.cmd`. It reuses an existing healthy
+server or starts one in the background, waits for `/api/health`, and then opens
+the site. Startup logs are stored under `.local-data/`.
+
+To enable DeepSeek, open `Settings -> Full settings -> Account -> Advanced local settings`, paste the key, and save. The key remains on the local backend only. After sending a message, the model status should show `llm`; `local_fallback` means the key, connection, or provider request needs attention.
