@@ -24,8 +24,10 @@ function publicUser(user = {}) {
 
 function safeError(error) {
   if (error?.code === 'invalid_email' || error?.code === 'invalid_password') return response(400, { error: error.code });
+  if (error?.code === 'invalid_credentials') return response(401, { error: 'invalid_credentials' });
+  if (error?.code === 'email_not_confirmed') return response(403, { error: 'email_not_confirmed' });
   if (isAuthUnavailableError(error)) return response(503, { error: 'auth_unavailable', retryable: true });
-  if (error?.status === 429) return response(429, { error: 'too_many_requests' });
+  if (error?.code === 'too_many_requests' || error?.status === 429) return response(429, { error: 'too_many_requests' });
   return response(401, { error: 'auth_failed' });
 }
 

@@ -81,6 +81,7 @@ import {
   deserializeOnboardingState,
   normalizeBirthday,
   saveBirthday,
+  selectOnboardingPath,
   setInterfaceLocale
 } from './onboardingState.js';
 import {
@@ -101,7 +102,7 @@ import {
   updateCreationDraft
 } from './creationFlowState.js';
 import { formatChatTimestamp } from './chatTime.js';
-import { authenticatedStatusFromLogin, createAuthUiState, parseAuthCallback, reduceAuthState } from './authBrowser.js';
+import { authErrorKey, authenticatedStatusFromLogin, createAuthUiState, parseAuthCallback, reduceAuthState } from './authBrowser.js';
 import { accountStorageKey, migrateGuestStorage } from './accountStorage.js';
 
 const STORAGE_KEY = 'english-companions-state-v1';
@@ -276,7 +277,7 @@ function loadOnboardingState() {
   const hasExistingCompanions = state.companions.length > 0;
   let next = createOnboardingState({
     interfaceLocale: state.user.interfaceLocale,
-    stage: hasExistingCompanions ? 'complete' : 'language',
+    stage: hasExistingCompanions ? 'complete' : 'welcome',
     completed: hasExistingCompanions
   });
   if (state.user.birthday) next = saveBirthday(next, state.user.birthday, now);
@@ -589,12 +590,16 @@ function renderFirstUse() {
   const visible = state.companions.length === 0;
   els.firstUse.hidden = !visible;
   if (!visible) return;
-  const activeStage = ['language', 'birthday', 'companion'].includes(onboarding.stage)
+  const activeStage = ['welcome', 'language', 'birthday', 'companion'].includes(onboarding.stage)
     ? onboarding.stage
     : 'companion';
+  let activeSection = null;
   els.firstUse.querySelectorAll('[data-onboarding-stage]').forEach((section) => {
     section.hidden = section.dataset.onboardingStage !== activeStage;
+    if (!section.hidden) activeSection = section;
   });
+  const activeHeading = activeSection?.querySelector('h2[id]');
+  if (activeHeading) els.firstUse.setAttribute('aria-labelledby', activeHeading.id);
   els.onboardingBirthday.max = localCalendarDate();
   els.onboardingBirthday.value = onboarding.birthday || els.onboardingBirthday.value;
   els.onboardingPresetList.innerHTML = WYTH_PRESETS.map((preset) => `
@@ -1071,7 +1076,8 @@ function renderQuickSettings() {
 }
 
 function renderFullSettings(companion) {
-  els.fullSettingsNav.innerHTML = FULL_SETTINGS_SECTIONS.map((section) => `
+  const visibleSections = companion ? FULL_SETTINGS_SECTIONS : ['account'];
+  els.fullSettingsNav.innerHTML = visibleSections.map((section) => `
     <button type="button" data-settings-section="${section}" aria-current="${settingsState.activeSection === section ? 'page' : 'false'}">${tr(`settings.full.${section}`)}</button>
   `).join('');
   els.fullSettingsContent.innerHTML = `${interfaceStorageErrorKey ? `<p class="model-error" role="alert">${tr(interfaceStorageErrorKey)}</p>` : ''}${renderFullSettingsSection(companion, settingsState.activeSection)}`;
@@ -1739,17 +1745,9 @@ function hideTranslatePopover() {
   activeTranslation = null;
 }
 
-function authErrorKey(error) {
-  if (error === 'invalid_email') return 'auth.error.invalidEmail';
-  if (error === 'invalid_password') return 'auth.error.invalidPassword';
-  if (error === 'too_many_requests') return 'auth.error.rateLimited';
-  if (error === 'auth_unavailable' || error === 'auth_not_configured') return 'auth.error.unavailable';
-  return 'auth.error.failed';
-}
-
 function authInvalidFieldFor(error) {
   if (error === 'invalid_email') return 'email';
-  if (error === 'invalid_password') return 'password';
+  if (error === 'invalid_password' || error === 'invalid_credentials') return 'password';
   return '';
 }
 
@@ -1761,11 +1759,17 @@ function focusAuthFeedback() {
 }
 
 async function authRequest(path, body) {
-  const response = await fetch(path, {
-    method: body === undefined ? 'GET' : 'POST',
-    headers: body === undefined ? {} : { 'content-type': 'application/json' },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) })
-  });
+  let response;
+  try {
+    response = await fetch(path, {
+      method: body === undefined ? 'GET' : 'POST',
+      headers: body === undefined ? {} : { 'content-type': 'application/json' },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      signal: AbortSignal.timeout(65_000)
+    });
+  } catch {
+    throw Object.assign(new Error('auth_unavailable'), { code: 'auth_unavailable' });
+  }
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) throw Object.assign(new Error('auth_failed'), { code: payload.error || 'auth_failed' });
   return payload;
@@ -1796,7 +1800,7 @@ async function refreshAuthStatus({ renderSettings = true } = {}) {
 
 async function handleAuthCallback() {
   const callback = parseAuthCallback(window.location.search);
-  if (callback.kind === 'none') return;
+  if (callback.kind === 'none') return 'none';
   history.replaceState(null, '', window.location.pathname);
   if (callback.kind === 'error') {
     const errorKey = callback.errorCode === 'expired'
@@ -1805,7 +1809,7 @@ async function handleAuthCallback() {
         ? 'auth.error.unavailable'
         : 'auth.error.failed';
     authUiState = reduceAuthState(authUiState, { type: 'ERROR', errorKey });
-    return;
+    return callback.kind;
   }
   await refreshAuthStatus({ renderSettings: false });
   if (callback.kind === 'recovery') {
@@ -1815,6 +1819,7 @@ async function handleAuthCallback() {
   } else {
     authUiState = reduceAuthState(authUiState, { type: 'SUCCESS', noticeKey: 'auth.notice.confirmed' });
   }
+  return callback.kind;
 }
 
 async function submitAuthForm(form) {
@@ -1824,6 +1829,11 @@ async function submitAuthForm(form) {
   authInvalidField = '';
   authUiState = reduceAuthState(authUiState, { type: 'BUSY' });
   renderFullSettings(activeCompanion());
+  const wakeTimer = window.setTimeout(() => {
+    if (!authUiState.busy) return;
+    authUiState = { ...authUiState, noticeKey: 'auth.notice.waking' };
+    renderFullSettings(activeCompanion());
+  }, 2_500);
   try {
     if (mode === 'signup') {
       await authRequest('/api/auth/signup', { email: data.get('email'), password: data.get('password') });
@@ -1846,6 +1856,7 @@ async function submitAuthForm(form) {
     authInvalidField = authInvalidFieldFor(error.code);
     authUiState = reduceAuthState(authUiState, { type: 'ERROR', errorKey: authErrorKey(error.code) });
   }
+  window.clearTimeout(wakeTimer);
   renderFullSettings(activeCompanion());
   focusAuthFeedback();
 }
@@ -2836,6 +2847,24 @@ els.firstUse.addEventListener('click', (event) => {
     changeInterfaceLocale(localeButton.dataset.locale, 'firstUse');
     return;
   }
+  const pathButton = event.target.closest('[data-onboarding-path]');
+  if (pathButton) {
+    const nextOnboarding = selectOnboardingPath(onboarding, pathButton.dataset.onboardingPath);
+    if (!persistNextInterfaceState(nextOnboarding, state)) return;
+    render();
+    if (nextOnboarding.experience === 'returning') {
+      authUiState = reduceAuthState(authUiState, { type: 'MODE', mode: 'login' });
+      openFullSettingsSurface('account');
+    } else {
+      els.firstUse.querySelector('[data-onboarding-stage="language"]')?.focus();
+    }
+    return;
+  }
+  if (event.target.closest('[data-action="onboarding-login"]')) {
+    authUiState = reduceAuthState(authUiState, { type: 'MODE', mode: 'login' });
+    openFullSettingsSurface('account');
+    return;
+  }
   const preset = event.target.closest('[data-preset-id]');
   if (preset) createCompanionFromPreset(preset.dataset.presetId);
   if (event.target.closest('[data-action="custom-companion"]')) openCompanionDialog('create');
@@ -3004,8 +3033,15 @@ if (activeCompanion()) {
   saveReadReceipts();
 }
 render();
-await handleAuthCallback();
-await refreshAuthStatus({ renderSettings: false });
+const initialAuthCallback = await handleAuthCallback();
+await refreshAuthStatus({ renderSettings: true });
+if (initialAuthCallback === 'none'
+  && state.companions.length === 0
+  && onboarding.experience === 'returning'
+  && authUiState.state !== 'authenticated') {
+  authUiState = reduceAuthState(authUiState, { type: 'MODE', mode: 'login' });
+  openFullSettingsSurface('account');
+}
 refreshRuntimeStatus();
 if (activeCompanion()) refreshMemoryStatus(activeCompanion().id);
 runLocalScheduler();

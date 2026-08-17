@@ -220,6 +220,32 @@ test('supabase auth client refreshes and reads users without exposing provider e
   });
 });
 
+test('supabase auth client maps safe credential, confirmation, and email rate-limit errors', async () => {
+  const responses = [
+    new Response(JSON.stringify({ code: 'invalid_credentials', message: 'sensitive detail' }), { status: 400 }),
+    new Response(JSON.stringify({ code: 'email_not_confirmed', message: 'sensitive detail' }), { status: 400 }),
+    new Response(JSON.stringify({ code: 'over_email_send_rate_limit', message: 'sensitive detail' }), { status: 400 })
+  ];
+  const client = createSupabaseAuthClient({
+    supabaseUrl: 'https://project.supabase.co',
+    publishableKey: 'sb_publishable_test',
+    fetchImpl: async () => responses.shift()
+  });
+
+  await assert.rejects(
+    () => client.signIn({ email: 'user@example.com', password: 'wrong-password' }),
+    (error) => error.code === 'invalid_credentials' && !/sensitive detail/.test(error.message)
+  );
+  await assert.rejects(
+    () => client.signIn({ email: 'user@example.com', password: 'long-enough' }),
+    (error) => error.code === 'email_not_confirmed' && !/sensitive detail/.test(error.message)
+  );
+  await assert.rejects(
+    () => client.requestPasswordReset('user@example.com'),
+    (error) => error.code === 'too_many_requests' && error.status === 429 && !/sensitive detail/.test(error.message)
+  );
+});
+
 test('signup and password recovery place allowlisted redirect in the request URL', async () => {
   const calls = [];
   const client = createSupabaseAuthClient({

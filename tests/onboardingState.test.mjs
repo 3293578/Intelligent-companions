@@ -7,6 +7,7 @@ import {
   createOnboardingState,
   deserializeOnboardingState,
   normalizeBirthday,
+  selectOnboardingPath,
   saveBirthday,
   setInterfaceLocale,
   updateProgressiveProfile
@@ -17,7 +18,8 @@ const NOW = '2026-07-14';
 test('creates a safe versioned onboarding state', () => {
   assert.deepEqual(createOnboardingState(), {
     version: ONBOARDING_VERSION,
-    stage: 'language',
+    stage: 'welcome',
+    experience: '',
     interfaceLocale: 'zh-CN',
     birthday: '',
     ageGroup: 'unknown',
@@ -29,7 +31,19 @@ test('creates a safe versioned onboarding state', () => {
     },
     completed: false
   });
-  assert.equal(ONBOARDING_VERSION, 1);
+  assert.equal(ONBOARDING_VERSION, 2);
+});
+
+test('first-use choice sends new users into onboarding and returning users to sign in', () => {
+  const initial = createOnboardingState();
+  const newcomer = selectOnboardingPath(initial, 'new');
+  const returning = selectOnboardingPath(initial, 'returning');
+
+  assert.equal(newcomer.experience, 'new');
+  assert.equal(newcomer.stage, 'language');
+  assert.equal(returning.experience, 'returning');
+  assert.equal(returning.stage, 'welcome');
+  assert.deepEqual(selectOnboardingPath(initial, 'invalid'), initial);
 });
 
 test('validates real ISO birthdays and rejects malformed calendar dates', () => {
@@ -73,7 +87,7 @@ test('rejects invalid reference calendar dates instead of accepting rollover', (
 });
 
 test('saves a minor birthday and cannot opt the minor into romance', () => {
-  const state = saveBirthday(createOnboardingState({ romanceAllowed: true }), '2010-01-01', NOW);
+  const state = saveBirthday(selectOnboardingPath(createOnboardingState({ romanceAllowed: true }), 'new'), '2010-01-01', NOW);
 
   assert.equal(state.birthday, '2010-01-01');
   assert.equal(state.ageGroup, 'minor');
@@ -82,7 +96,7 @@ test('saves a minor birthday and cannot opt the minor into romance', () => {
 });
 
 test('saves an adult birthday and derives romance eligibility', () => {
-  const state = saveBirthday(createOnboardingState(), '2008-07-14', NOW);
+  const state = saveBirthday(selectOnboardingPath(createOnboardingState(), 'new'), '2008-07-14', NOW);
 
   assert.equal(state.ageGroup, 'adult');
   assert.equal(state.romanceAllowed, true);
@@ -135,7 +149,7 @@ test('rejects an invalid birthday without corrupting the current state', () => {
 });
 
 test('normalizes the interface locale and advances from language to birthday', () => {
-  const english = setInterfaceLocale(createOnboardingState(), 'EN_gb');
+  const english = setInterfaceLocale(selectOnboardingPath(createOnboardingState(), 'new'), 'EN_gb');
   const fallback = setInterfaceLocale(english, 'fr');
 
   assert.equal(english.interfaceLocale, 'en');
@@ -208,6 +222,7 @@ test('migrates old and partial onboarding states into the current contract', () 
   }), NOW);
 
   assert.equal(restored.version, ONBOARDING_VERSION);
+  assert.equal(restored.experience, 'new');
   assert.equal(restored.interfaceLocale, 'en');
   assert.equal(restored.birthday, '2000-02-29');
   assert.equal(restored.ageGroup, 'adult');
@@ -219,6 +234,18 @@ test('migrates old and partial onboarding states into the current contract', () 
   });
   assert.equal(restored.stage, 'profile');
   assert.equal(restored.completed, true);
+});
+
+test('restores a returning-user choice without forcing the birthday flow', () => {
+  const restored = deserializeOnboardingState(JSON.stringify({
+    version: ONBOARDING_VERSION,
+    stage: 'welcome',
+    experience: 'returning'
+  }), NOW);
+
+  assert.equal(restored.stage, 'welcome');
+  assert.equal(restored.experience, 'returning');
+  assert.equal(restored.completed, false);
 });
 
 test('re-derives minor restrictions instead of trusting stored authorization', () => {

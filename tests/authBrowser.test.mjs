@@ -2,11 +2,19 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  authErrorKey,
   authenticatedStatusFromLogin,
   createAuthUiState,
   parseAuthCallback,
   reduceAuthState
 } from '../src/authBrowser.js';
+
+test('auth errors distinguish credentials, confirmation, throttling, and outages', () => {
+  assert.equal(authErrorKey('invalid_credentials'), 'auth.error.credentials');
+  assert.equal(authErrorKey('email_not_confirmed'), 'auth.error.emailNotConfirmed');
+  assert.equal(authErrorKey('too_many_requests'), 'auth.error.rateLimited');
+  assert.equal(authErrorKey('auth_unavailable'), 'auth.error.unavailable');
+});
 
 test('auth UI begins in a non-blocking loading state', () => {
   assert.deepEqual(createAuthUiState(), {

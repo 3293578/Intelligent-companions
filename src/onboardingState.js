@@ -1,10 +1,11 @@
 import { normalizeLocale } from './wythI18n.js';
 
-export const ONBOARDING_VERSION = 1;
+export const ONBOARDING_VERSION = 2;
 
 const GENDERS = new Set(['woman', 'man', 'non_binary', 'prefer_not_to_say', '']);
 const COMPANION_GENDERS = new Set(['man', 'woman', 'neutral', 'not_sure', '']);
-const STAGES = new Set(['language', 'birthday', 'companion', 'profile', 'complete']);
+const STAGES = new Set(['welcome', 'language', 'birthday', 'companion', 'profile', 'complete']);
+const EXPERIENCES = new Set(['', 'new', 'returning']);
 const VERIFIED_STATE = Symbol('verifiedOnboardingAge');
 
 function normalizeEnum(value, allowed, fallback = '') {
@@ -41,7 +42,8 @@ export function createOnboardingState(input = {}) {
 
   const state = {
     version: ONBOARDING_VERSION,
-    stage: STAGES.has(input.stage) ? input.stage : 'language',
+    stage: STAGES.has(input.stage) ? input.stage : 'welcome',
+    experience: EXPERIENCES.has(input.experience) ? input.experience : '',
     interfaceLocale: normalizeLocale(input.interfaceLocale),
     birthday: verified ? input.birthday : '',
     ageGroup: verified ? input.ageGroup : 'unknown',
@@ -58,6 +60,16 @@ export function createOnboardingState(input = {}) {
   };
   if (verified) Object.defineProperty(state, VERIFIED_STATE, { value: true, enumerable: true });
   return state;
+}
+
+export function selectOnboardingPath(state, experience) {
+  if (experience !== 'new' && experience !== 'returning') return createOnboardingState(state);
+  const normalized = createOnboardingState(state);
+  return {
+    ...normalized,
+    experience,
+    stage: experience === 'new' ? 'language' : 'welcome'
+  };
 }
 
 export function calculateAge(birthday, now) {
@@ -155,8 +167,12 @@ export function deserializeOnboardingState(raw, now) {
       ? parsed.profile
       : {};
     const persistedStage = STAGES.has(parsed.stage) ? parsed.stage : 'companion';
+    const experience = EXPERIENCES.has(parsed.experience)
+      ? parsed.experience
+      : parsed.version < ONBOARDING_VERSION ? 'new' : '';
     let state = createOnboardingState({
       stage: persistedStage,
+      experience,
       interfaceLocale: parsed.interfaceLocale ?? parsed.locale,
       profile: {
         gender: profile.gender ?? parsed.gender,
@@ -166,6 +182,8 @@ export function deserializeOnboardingState(raw, now) {
       },
       completed: parsed.completed === true
     });
+
+    if (experience === 'returning' && persistedStage === 'welcome') return state;
 
     const birthday = parsed.birthday ?? parsed.birthDate;
     const normalizedBirthday = normalizeBirthday(birthday, now);

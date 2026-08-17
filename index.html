@@ -71,21 +71,30 @@
       </div>
     </section>
 
-    <section class="first-use" id="firstUse" hidden aria-labelledby="firstUseTitle">
+    <section class="first-use" id="firstUse" hidden aria-labelledby="firstUseWelcomeTitle">
       <div class="onboarding-language" id="interfaceLanguageSwitch" role="group" data-i18n-aria-label="accessibility.interfaceLanguage" aria-label="Interface language">
         <button type="button" data-locale="zh-CN" data-i18n-aria-label="accessibility.localeChinese" aria-label="切换为简体中文" aria-pressed="true">中</button>
         <span aria-hidden="true">/</span>
         <button type="button" data-locale="en" data-i18n-aria-label="accessibility.localeEnglish" aria-label="Switch to English" aria-pressed="false">EN</button>
       </div>
       <p class="onboarding-error onboarding-storage-error" id="onboardingStorageError" role="alert" aria-live="polite"></p>
-      <section class="onboarding-step" data-onboarding-stage="language" tabindex="-1">
+      <section class="onboarding-step onboarding-welcome" data-onboarding-stage="welcome" tabindex="-1">
         <span class="onboarding-eyebrow" data-i18n="brand.tagline">with warmth</span>
-        <h2 id="firstUseTitle" data-i18n="onboarding.language.title">选择页面语言</h2>
+        <h2 id="firstUseWelcomeTitle" data-i18n="onboarding.welcome.title">你来过 Wyth 吗？</h2>
+        <p data-i18n="onboarding.welcome.description">第一次来，我们慢慢认识；已经使用过，就直接登录。</p>
+        <div class="onboarding-path-actions">
+          <button type="button" data-onboarding-path="new" data-i18n="onboarding.welcome.new">第一次来</button>
+          <button type="button" data-onboarding-path="returning" data-i18n="onboarding.welcome.returning">我使用过，直接登录</button>
+        </div>
+      </section>
+      <section class="onboarding-step" data-onboarding-stage="language" tabindex="-1" hidden>
+        <span class="onboarding-eyebrow" data-i18n="brand.tagline">with warmth</span>
+        <h2 id="firstUseLanguageTitle" data-i18n="onboarding.language.title">选择页面语言</h2>
         <p data-i18n="onboarding.language.description">之后可以随时在设置中更改。</p>
       </section>
       <section class="onboarding-step onboarding-birthday" data-onboarding-stage="birthday" tabindex="-1" hidden>
         <span class="onboarding-eyebrow" data-i18n="brand.tagline">with warmth</span>
-        <h2 data-i18n="onboarding.birthday.title">你的生日是什么时候？</h2>
+        <h2 id="firstUseBirthdayTitle" data-i18n="onboarding.birthday.title">你的生日是什么时候？</h2>
         <form id="onboardingBirthdayForm" novalidate>
           <label for="onboardingBirthday" data-i18n="onboarding.birthday.label">生日</label>
           <input id="onboardingBirthday" name="birthday" type="date" autocomplete="bday" aria-describedby="birthdayPrivacy birthdayError">
@@ -97,12 +106,13 @@
       <section class="onboarding-step" data-onboarding-stage="companion" tabindex="-1" hidden>
         <div class="first-use-copy">
           <span data-i18n="brand.tagline">with warmth</span>
-          <h2 data-i18n="onboarding.prompt">今天想和谁说说话？</h2>
+          <h2 id="firstUseCompanionTitle" data-i18n="onboarding.prompt">今天想和谁说说话？</h2>
           <p data-i18n="onboarding.promptHint">先从一种陪伴开始，之后都可以慢慢调整。</p>
         </div>
         <div class="preset-glimpses" id="onboardingPresetList"></div>
         <button class="first-use-custom" type="button" data-action="custom-companion" data-i18n="onboarding.createCustom">创建自己的角色</button>
       </section>
+      <button class="onboarding-login" id="onboardingLoginButton" type="button" data-action="onboarding-login" data-i18n="auth.login">登录</button>
     </section>
   </div>
 

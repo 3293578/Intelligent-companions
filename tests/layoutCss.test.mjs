@@ -393,6 +393,18 @@ test('first use offers the approved prompt and five companionship presets', () =
   assert.match(appJs, /data-preset-id/);
 });
 
+test('first use distinguishes returning users and keeps an accessible sign-in shortcut', () => {
+  assert.match(html, /data-onboarding-stage="welcome"/);
+  assert.match(html, /data-onboarding-path="new"/);
+  assert.match(html, /data-onboarding-path="returning"/);
+  assert.match(html, /id="onboardingLoginButton"[^>]*type="button"/);
+  assert.match(appJs, /firstUse\.setAttribute\('aria-labelledby',\s*activeHeading\.id\)/);
+  assert.match(appJs, /selectOnboardingPath/);
+  assert.match(appJs, /stage:\s*hasExistingCompanions\s*\?\s*'complete'\s*:\s*'welcome'/);
+  assert.match(css, /\.onboarding-login\s*\{/);
+  assert.match(css, /\.onboarding-login:focus-visible/);
+});
+
 test('the active scene has a lightweight ambient canvas that pauses in quiet states', () => {
   assert.match(html, /id="sceneAtmosphere"/);
   assert.match(appJs, /requestAnimationFrame/);
@@ -480,4 +492,8 @@ test('first-use storage failures are announced and locale focus is restored', ()
   assert.match(appJs, /changeInterfaceLocale\([^,]+,\s*'firstUse'\)/);
   assert.match(appJs, /source === 'drawer'[\s\S]*els\.studioPanel\.querySelector/);
   assert.doesNotMatch(appJs, /requestAnimationFrame\(\(\) => document\.querySelector\(`\[data-locale/);
+});
+
+test('startup authentication refreshes an account surface opened while status is loading', () => {
+  assert.match(appJs, /const initialAuthCallback = await handleAuthCallback\(\);\s*await refreshAuthStatus\(\{ renderSettings: true \}\);/);
 });

@@ -55,6 +55,17 @@ function authError(code, status = 400) {
   return error;
 }
 
+function safeProviderError(response, payload = {}) {
+  const providerCode = String(payload.code || payload.error_code || payload.error || '').toLowerCase();
+  if (response.status >= 500) return authError('auth_unavailable', 503);
+  if (response.status === 429 || providerCode.includes('rate_limit')) {
+    return authError('too_many_requests', 429);
+  }
+  if (providerCode === 'invalid_credentials') return authError('invalid_credentials', 401);
+  if (providerCode === 'email_not_confirmed') return authError('email_not_confirmed', 403);
+  return authError('auth_failed', response.status);
+}
+
 export function normalizeCredentials(input = {}) {
   const email = String(input.email || '').trim().toLowerCase();
   const password = String(input.password || '');
@@ -219,7 +230,7 @@ export function createSupabaseAuthClient(options = {}) {
       unavailable.attempts = maxAttempts;
       throw unavailable;
     }
-    if (!response.ok) throw authError('auth_failed', response.status);
+    if (!response.ok) throw safeProviderError(response, payload);
     return payload;
   }
 

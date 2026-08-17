@@ -25,6 +25,16 @@ export function authenticatedStatusFromLogin(payload = {}) {
   return { configured: true, state: 'authenticated', user };
 }
 
+export function authErrorKey(error) {
+  if (error === 'invalid_email') return 'auth.error.invalidEmail';
+  if (error === 'invalid_password') return 'auth.error.invalidPassword';
+  if (error === 'invalid_credentials') return 'auth.error.credentials';
+  if (error === 'email_not_confirmed') return 'auth.error.emailNotConfirmed';
+  if (error === 'too_many_requests') return 'auth.error.rateLimited';
+  if (error === 'auth_unavailable' || error === 'auth_not_configured' || error === 'request_timeout') return 'auth.error.unavailable';
+  return 'auth.error.failed';
+}
+
 export function reduceAuthState(current, event = {}) {
   if (event.type === 'STATUS') {
     return {
