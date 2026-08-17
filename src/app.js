@@ -340,7 +340,7 @@ function applyInterfaceLocale({ rerender = false } = {}) {
   document.documentElement.lang = WYTH_LOCALES[locale].meta.htmlLang;
   document.title = tr('brand.windowTitle');
   applyTranslatedAttributes();
-  els.interfaceLanguageSwitch.querySelectorAll('[data-locale]').forEach((button) => {
+  els.firstUse.querySelectorAll('[data-locale]').forEach((button) => {
     button.setAttribute('aria-pressed', String(button.dataset.locale === locale));
   });
   if (activeDrawer) {
@@ -363,6 +363,10 @@ function changeInterfaceLocale(locale, source) {
   activeTranslation = null;
   applyInterfaceLocale({ rerender: true });
   requestAnimationFrame(() => {
+    if (source === 'firstUse' && onboarding.stage === 'birthday') {
+      els.firstUse.querySelector('[data-onboarding-stage="birthday"]')?.focus();
+      return;
+    }
     const selector = `[data-locale="${onboarding.interfaceLocale}"]`;
     const button = source === 'drawer' && activeDrawer === 'settings'
       ? els.studioPanel.querySelector(selector)

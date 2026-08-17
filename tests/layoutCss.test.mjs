@@ -431,6 +431,9 @@ test('mobile transcript never exposes a horizontal scrollbar for long content', 
 
 test('first use exposes language and birthday before companion selection', () => {
   assert.match(html, /id="interfaceLanguageSwitch"/);
+  assert.match(html, /id="onboardingLanguageOptions"[^>]*role="group"[^>]*aria-labelledby="firstUseLanguageTitle"/);
+  assert.match(html, /class="onboarding-language-choice"[^>]*data-locale="zh-CN"/);
+  assert.match(html, /class="onboarding-language-choice"[^>]*data-locale="en"/);
   assert.match(html, /id="onboardingBirthday"/);
   assert.match(html, /data-onboarding-stage="language"/);
   assert.match(html, /data-onboarding-stage="birthday"/);
@@ -438,6 +441,9 @@ test('first use exposes language and birthday before companion selection', () =>
   assert.match(html, /autocomplete="bday"/);
   assert.match(appJs, /setInterfaceLocale/);
   assert.match(appJs, /saveBirthday/);
+  assert.match(appJs, /els\.firstUse\.querySelectorAll\('\[data-locale\]'\)/);
+  assert.match(css, /\.onboarding-language-options\s*\{/);
+  assert.match(css, /\.onboarding-language-choice\[aria-pressed="true"\]/);
 });
 
 test('language switching updates document metadata without reloading', () => {
