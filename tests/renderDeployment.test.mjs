@@ -24,3 +24,35 @@ test('package exposes a production start command and a bounded supported Node ra
   assert.equal(pkg.scripts.start, 'node server.mjs');
   assert.match(pkg.engines.node, /^>=22 /);
 });
+
+test('hosted paid operations use authenticated user and trusted client-IP rate limits', () => {
+  const server = fs.readFileSync(path.join(root, 'server.mjs'), 'utf8');
+  assert.match(server, /isMeteredApiPath\(requestUrl\.pathname\)/);
+  assert.match(server, /userId:\s*authenticatedUser\.id/);
+  assert.match(server, /clientIpFromRequest\(request,\s*\{\s*trustProxy\s*\}\)/);
+  assert.match(server, /daily_request_limit/);
+  for (const route of ['translate', 'language-assist', 'content', 'chat']) {
+    assert.match(server, new RegExp(`requestUrl\\.pathname === ['\"]\\/api\\/${route}['\"]`));
+    assert.doesNotMatch(server, new RegExp(`startsWith\\(['\"]\\/api\\/${route}`));
+  }
+  assert.match(server, /requestUrl\.pathname\.startsWith\(['"]\/api\/['"]\)[\s\S]{0,160}not_found/);
+});
+
+test('Supabase auth shares the configured outbound path and LLM has a network-only fallback', () => {
+  const server = fs.readFileSync(path.join(root, 'server.mjs'), 'utf8');
+  const proxyDeclaration = server.indexOf('const outboundFetch =');
+  const authClientDeclaration = server.indexOf('const authClient =');
+  assert.ok(proxyDeclaration > -1 && proxyDeclaration < authClientDeclaration);
+  assert.match(server, /createSupabaseAuthClient\(\{\s*supabaseUrl,\s*publishableKey:\s*supabasePublishableKey,\s*fetchImpl:\s*outboundFetch\s*\}\)/);
+  assert.match(server, /createNetworkFallbackFetch\(\{[\s\S]{0,180}primaryFetch:\s*globalThis\.fetch[\s\S]{0,180}fallbackFetch:\s*outboundFetch/);
+});
+
+test('beginner deployment docs consistently use the approved Render path', () => {
+  const guide = fs.readFileSync(path.join(root, 'docs/wyth/cloud-setup-for-beginners.md'), 'utf8');
+  const inventory = fs.readFileSync(path.join(root, 'docs/wyth/production-secret-inventory.md'), 'utf8');
+  assert.match(guide, /Render Blueprint/);
+  assert.match(guide, /银行卡验证/);
+  assert.doesNotMatch(guide, /Railway/);
+  assert.doesNotMatch(inventory, /Railway/);
+  assert.match(inventory, /Render staging Environment/);
+});

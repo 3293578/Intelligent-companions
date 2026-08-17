@@ -57,35 +57,65 @@ function parseFirstJsonValue(text) {
 }
 
 const defaultProxyClient = {
-  request(proxy, targetUrl, requestText) {
+  request(proxy, targetUrl, requestText, options = {}) {
     return new Promise((resolve, reject) => {
+      const signal = options.signal;
+      const timeoutMs = Math.max(1_000, Number(options.timeoutMs) || 15_000);
+      let secureSocket;
+      let settled = false;
       const connectRequest = http.request({
         host: proxy.hostname,
         port: Number(proxy.port || 80),
         method: 'CONNECT',
         path: `${targetUrl.hostname}:443`,
-        timeout: 15000
+        timeout: timeoutMs
       });
+
+      const cleanup = () => signal?.removeEventListener('abort', onAbort);
+      const fail = (error) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        connectRequest.destroy();
+        secureSocket?.destroy();
+        reject(error);
+      };
+      const finish = (value) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve(value);
+      };
+      const onAbort = () => fail(signal?.reason instanceof Error
+        ? signal.reason
+        : new DOMException('The operation was aborted', 'AbortError'));
+
+      if (signal?.aborted) {
+        onAbort();
+        return;
+      }
+      signal?.addEventListener('abort', onAbort, { once: true });
 
       connectRequest.on('connect', (response, socket) => {
         if (response.statusCode !== 200) {
           socket.destroy();
-          reject(new Error(`Proxy CONNECT failed with ${response.statusCode}`));
+          fail(new Error(`Proxy CONNECT failed with ${response.statusCode}`));
           return;
         }
-        const secureSocket = tls.connect({ socket, servername: targetUrl.hostname }, () => {
+        secureSocket = tls.connect({ socket, servername: targetUrl.hostname }, () => {
           secureSocket.write(requestText);
         });
+        secureSocket.setTimeout(timeoutMs, () => fail(new DOMException('Proxy request timed out', 'TimeoutError')));
         const chunks = [];
         secureSocket.on('data', (chunk) => chunks.push(chunk));
-        secureSocket.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
-        secureSocket.on('error', reject);
+        secureSocket.on('end', () => finish(Buffer.concat(chunks).toString('utf8')));
+        secureSocket.on('error', fail);
       });
 
       connectRequest.on('timeout', () => {
-        connectRequest.destroy(new Error('Proxy CONNECT timed out'));
+        fail(new DOMException('Proxy CONNECT timed out', 'TimeoutError'));
       });
-      connectRequest.on('error', reject);
+      connectRequest.on('error', fail);
       connectRequest.end();
     });
   }
@@ -125,7 +155,10 @@ export async function fetchTextThroughHttpProxy(url, options = {}) {
   const targetUrl = new URL(url);
   const requestText = buildRequestText(targetUrl, options);
   const client = options.proxyClient || defaultProxyClient;
-  return splitHttpResponse(await client.request(proxy, targetUrl, requestText));
+  return splitHttpResponse(await client.request(proxy, targetUrl, requestText, {
+    signal: options.signal,
+    timeoutMs: options.timeoutMs
+  }));
 }
 
 function resolveRedirectUrl(currentUrl, location) {
@@ -175,5 +208,36 @@ export function createProxyFetch(proxyUrl, options = {}) {
     }
 
     throw new Error('Unable to resolve proxy redirect.');
+  };
+}
+
+function isThrownNetworkError(error) {
+  if (error instanceof TypeError && error.message === 'fetch failed') return true;
+  const code = String(error?.code || error?.cause?.code || '').toUpperCase();
+  return [
+    'EACCES',
+    'ECONNREFUSED',
+    'ECONNRESET',
+    'EHOSTUNREACH',
+    'ENETUNREACH',
+    'ENOTFOUND',
+    'EPIPE',
+    'ETIMEDOUT'
+  ].includes(code);
+}
+
+export function createNetworkFallbackFetch(options = {}) {
+  const primaryFetch = options.primaryFetch;
+  const fallbackFetch = options.fallbackFetch;
+  if (typeof primaryFetch !== 'function') return fallbackFetch;
+  if (typeof fallbackFetch !== 'function') return primaryFetch;
+
+  return async function networkFallbackFetch(url, requestOptions = {}) {
+    try {
+      return await primaryFetch(url, requestOptions);
+    } catch (error) {
+      if (!isThrownNetworkError(error)) throw error;
+      return fallbackFetch(url, requestOptions);
+    }
   };
 }

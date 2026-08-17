@@ -564,6 +564,8 @@ const CATALOG_ENTRIES = Object.freeze([
 
   ['error.generic', '刚才没有成功，请重试。', 'Something did not work. Please try again.'],
   ['error.chatUnavailable', '现在暂时无法连接聊天服务。', 'Chat is temporarily unavailable.'],
+  ['error.chatAuthUnavailable', '账号验证网络暂时不可用，请稍后重试；你的 DeepSeek 密钥没有丢失。', 'Account verification is temporarily unavailable. Please retry shortly; your DeepSeek key is still saved.'],
+  ['error.chatAuthenticationRequired', '请先重新登录并确认邮箱，再继续聊天。', 'Please sign in again and verify your email before continuing the chat.'],
   ['error.translateUnavailable', '现在暂时无法翻译。', 'Translation is temporarily unavailable.'],
   ['error.languageAssistUnavailable', '现在暂时无法提供语言辅助。', 'Language help is temporarily unavailable.'],
   ['error.modelSaveFailed', '模型设置保存失败。', 'Model settings could not be saved.'],

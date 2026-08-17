@@ -1,7 +1,52 @@
 const ACCESS_COOKIE = 'wyth_access';
 const REFRESH_COOKIE = 'wyth_refresh';
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
+
+export function createVerifiedSessionCache(options = {}) {
+  const now = options.now || (() => Date.now());
+  const ttlMs = Math.max(1_000, Number(options.ttlMs) || 5 * 60_000);
+  const maxEntries = Math.max(10, Number(options.maxEntries) || 2_000);
+  const entries = new Map();
+  const tokenKey = (token) => createHash('sha256').update(String(token || '')).digest('base64url');
+
+  function removeExpired(at) {
+    for (const [key, entry] of entries) {
+      if (entry.expiresAt <= at) entries.delete(key);
+    }
+  }
+
+  return {
+    get(token) {
+      if (!token) return null;
+      const key = tokenKey(token);
+      const entry = entries.get(key);
+      if (!entry) return null;
+      if (entry.expiresAt <= now()) {
+        entries.delete(key);
+        return null;
+      }
+      return entry.user;
+    },
+    set(token, user, expiresInSeconds) {
+      if (!token || !user?.id) return false;
+      const at = now();
+      removeExpired(at);
+      while (entries.size >= maxEntries) entries.delete(entries.keys().next().value);
+      const providerTtlMs = Number(expiresInSeconds) > 0 ? Number(expiresInSeconds) * 1_000 : ttlMs;
+      entries.set(tokenKey(token), { user, expiresAt: at + Math.min(ttlMs, providerTtlMs) });
+      return true;
+    },
+    delete(token) {
+      if (!token) return false;
+      return entries.delete(tokenKey(token));
+    },
+    snapshot() {
+      removeExpired(now());
+      return { size: entries.size };
+    }
+  };
+}
 
 function authError(code, status = 400) {
   const error = new Error(code);
@@ -96,15 +141,21 @@ export function isAuthUnavailableError(error) {
 
 export async function resolveAuthenticatedUser(cookieHeader, authClient, options = {}) {
   const authCookies = parseAuthCookies(cookieHeader);
+  const sessionCache = options.sessionCache;
   if (!authCookies.accessToken && !authCookies.refreshToken) throw authError('session_missing', 401);
+  const cachedUser = sessionCache?.get(authCookies.accessToken);
+  if (cachedUser) return { user: cachedUser, cookies: [] };
   try {
     const user = await authClient.getUser(authCookies.accessToken);
+    sessionCache?.set(authCookies.accessToken, user);
     return { user, cookies: [] };
   } catch (error) {
     if (!isRefreshableSessionError(error)) throw error;
     if (!authCookies.refreshToken) throw authError('session_expired', 401);
     const session = await authClient.refresh(authCookies.refreshToken);
     const user = await authClient.getUser(session.access_token);
+    sessionCache?.delete(authCookies.accessToken);
+    sessionCache?.set(session.access_token, user, session.expires_in);
     return { user, cookies: createAuthCookies(session, options) };
   }
 }
@@ -188,9 +239,14 @@ export function createSupabaseAuthClient(options = {}) {
       if (!refreshToken) throw authError('session_missing', 401);
       return request('/token?grant_type=refresh_token', { body: { refresh_token: refreshToken } });
     },
-    getUser(accessToken) {
+    getUser(accessToken, requestOptions = {}) {
       if (!accessToken) throw authError('session_missing', 401);
-      return request('/user', { method: 'GET', accessToken, maxAttempts: 2 });
+      return request('/user', {
+        method: 'GET',
+        accessToken,
+        maxAttempts: requestOptions.maxAttempts ?? 2,
+        timeoutMs: requestOptions.timeoutMs ?? requestTimeoutMs
+      });
     },
     requestPasswordReset(email, redirectTo) {
       const normalized = normalizeCredentials({ email, password: 'validation-only' }).email;

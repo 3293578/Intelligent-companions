@@ -21,6 +21,14 @@ export function completeChatSend(chatUiState, companionId, error = '') {
   };
 }
 
+export function chatFailureMessageKey(errorCode) {
+  if (errorCode === 'auth_unavailable') return 'error.chatAuthUnavailable';
+  if (errorCode === 'authentication_required' || errorCode === 'email_not_verified') {
+    return 'error.chatAuthenticationRequired';
+  }
+  return 'error.chatUnavailable';
+}
+
 export function buildRenderableMessages(messages, options = {}) {
   const visibleMessages = messages.filter((message) => message.companionId === options.companionId);
   if (options.pendingCompanionId !== options.companionId) return visibleMessages;

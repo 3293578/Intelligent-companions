@@ -2,9 +2,67 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  createNetworkFallbackFetch,
   createProxyFetch,
   fetchTextThroughHttpProxy
 } from '../src/nodeProxyFetch.js';
+
+test('network fallback fetch retries thrown connection errors through the trusted fallback', async () => {
+  const calls = [];
+  const fetchImpl = createNetworkFallbackFetch({
+    primaryFetch: async (_url, options) => {
+      calls.push({ path: 'direct', authorization: options.headers.authorization });
+      throw new TypeError('fetch failed', { cause: { code: 'EACCES' } });
+    },
+    fallbackFetch: async (_url, options) => {
+      calls.push({ path: 'fallback', authorization: options.headers.authorization });
+      return { ok: true, status: 200 };
+    }
+  });
+
+  const response = await fetchImpl('https://api.deepseek.com/chat/completions', {
+    headers: { authorization: 'Bearer test-key' }
+  });
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(calls.map((call) => call.path), ['direct', 'fallback']);
+  assert.equal(calls[1].authorization, 'Bearer test-key');
+});
+
+test('network fallback fetch never retries provider HTTP errors through the fallback', async () => {
+  let fallbackCalls = 0;
+  const expected = { ok: false, status: 401 };
+  const fetchImpl = createNetworkFallbackFetch({
+    primaryFetch: async () => expected,
+    fallbackFetch: async () => {
+      fallbackCalls += 1;
+      return { ok: true, status: 200 };
+    }
+  });
+
+  const response = await fetchImpl('https://api.deepseek.com/chat/completions');
+
+  assert.equal(response, expected);
+  assert.equal(fallbackCalls, 0);
+});
+
+test('network fallback fetch does not hide application exceptions', async () => {
+  let fallbackCalls = 0;
+  const fetchImpl = createNetworkFallbackFetch({
+    primaryFetch: async () => {
+      throw new Error('invalid request construction');
+    },
+    fallbackFetch: async () => {
+      fallbackCalls += 1;
+    }
+  });
+
+  await assert.rejects(
+    fetchImpl('https://api.deepseek.com/chat/completions'),
+    /invalid request construction/
+  );
+  assert.equal(fallbackCalls, 0);
+});
 
 test('fetchTextThroughHttpProxy sends a CONNECT request and reads HTTPS response text', async () => {
   const writes = [];
@@ -161,4 +219,20 @@ test('createProxyFetch sends POST requests with headers and body through the pro
   assert.match(writes[0], /content-type: application\/json/i);
   assert.match(writes[0], /content-length: 24/i);
   assert.match(writes[0], /\r\n\r\n\{"model":"gpt-4\.1-mini"\}$/);
+});
+
+test('createProxyFetch forwards abort signals so stalled proxy requests can be cancelled', async () => {
+  const controller = new AbortController();
+  const fetchImpl = createProxyFetch('http://127.0.0.1:7890', {
+    proxyClient: {
+      request: async (_proxy, _targetUrl, _requestText, requestOptions) => new Promise((_resolve, reject) => {
+        requestOptions.signal.addEventListener('abort', () => reject(requestOptions.signal.reason), { once: true });
+      })
+    }
+  });
+
+  const pending = fetchImpl('https://example.com/stalled', { signal: controller.signal });
+  controller.abort(new DOMException('request timed out', 'TimeoutError'));
+
+  await assert.rejects(pending, (error) => error.name === 'TimeoutError');
 });

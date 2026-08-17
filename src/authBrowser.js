@@ -19,6 +19,12 @@ export function parseAuthCallback(search = '') {
   return { kind: 'none' };
 }
 
+export function authenticatedStatusFromLogin(payload = {}) {
+  const user = payload?.user;
+  if (!user?.id) return null;
+  return { configured: true, state: 'authenticated', user };
+}
+
 export function reduceAuthState(current, event = {}) {
   if (event.type === 'STATUS') {
     return {
@@ -33,6 +39,13 @@ export function reduceAuthState(current, event = {}) {
   if (event.type === 'MODE') return { ...current, mode: event.mode, noticeKey: '', errorKey: '' };
   if (event.type === 'BUSY') return { ...current, busy: true, noticeKey: '', errorKey: '' };
   if (event.type === 'SUCCESS') return { ...current, busy: false, noticeKey: event.noticeKey || '', errorKey: '' };
-  if (event.type === 'ERROR') return { ...current, busy: false, noticeKey: '', errorKey: event.errorKey || 'auth.error.failed' };
+  if (event.type === 'ERROR') return {
+    ...current,
+    ...(typeof event.configured === 'boolean' ? { configured: event.configured } : {}),
+    ...(event.state ? { state: event.state } : {}),
+    busy: false,
+    noticeKey: '',
+    errorKey: event.errorKey || 'auth.error.failed'
+  };
   return current;
 }

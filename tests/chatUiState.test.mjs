@@ -5,12 +5,19 @@ import {
   beginChatSend,
   buildRenderableMessages,
   canSendChatMessage,
+  chatFailureMessageKey,
   completeChatSend,
   createDailyPushActions,
   countUnreadCompanionMessages,
   markCompanionRead,
   tagAssistantReplySource
 } from '../src/chatUiState.js';
+
+test('chat failures distinguish account verification outages from model outages', () => {
+  assert.equal(chatFailureMessageKey('auth_unavailable'), 'error.chatAuthUnavailable');
+  assert.equal(chatFailureMessageKey('authentication_required'), 'error.chatAuthenticationRequired');
+  assert.equal(chatFailureMessageKey('model_unavailable'), 'error.chatUnavailable');
+});
 
 test('blocks duplicate sends while a companion reply is pending', () => {
   const idle = { pendingCompanionId: null, error: '' };

@@ -9,7 +9,7 @@
 | 需要 | 服务 | 为什么先选它 | 现在是否要开通 |
 | --- | --- | --- | --- |
 | 账号、数据库、头像存储 | Supabase | 托管 Auth、Postgres、Storage，适合邮件密码登录与用户数据隔离 | 是，先建 staging |
-| 部署 Node 服务 | Railway | 不需要自己维护 Linux 服务器，支持健康检查、环境变量与回滚 | 在 Supabase 准备完成后 |
+| 部署 Node 服务 | Render | 不需要自己维护 Linux 服务器；仓库已经提供 `render.yaml` Blueprint、健康检查与私密环境变量声明 | staging 银行卡验证完成后 |
 | 发验证/重置邮件 | Resend | 配置较少，适合先做测试邮件 | 在上线账户功能前 |
 | 错误与故障监控 | Sentry | 能看到生产报错而不读取用户聊天内容 | 在 staging 部署后 |
 | 域名与代码部署 | GitHub + 域名注册商 | GitHub 用于审查/自动部署；域名用于正式访问与邮件验证 | GitHub 先行，域名稍后 |
@@ -31,11 +31,11 @@
 
 1. 创建/确认 GitHub 账号并开启双重验证；不要把密码或恢复码交给任何人。
 2. 创建 Supabase 账号，先建立一个 staging 项目。
-3. 创建 Railway 账号并连接 GitHub；此时不需要信用卡也不部署正式站。
+3. 创建 Render 账号并连接 GitHub；使用 `render.yaml` 的 Render Blueprint 部署 staging。Render 当前要求银行卡验证时，必须使用本人真实、受支持且已开通境外线上支付的卡。
 4. 创建 Sentry 与 Resend 测试项目。
 5. 等 staging 有公开 HTTPS 地址、价格页、隐私政策、服务条款和退款/取消政策后，再申请 Paddle。
 6. 同期自行注册 PayPal 中国个人卖家，完成平台要求的身份与收款验证；审批能力以其后台实际显示为准。
-7. 购买域名，配置 production 后再创建 production 的 Supabase/Railway/邮件/监控项目。
+7. 购买域名，配置 production 后再创建 production 的 Supabase/Render/邮件/监控项目。
 
 ## 4. 第一步：创建 Supabase staging 项目
 
@@ -50,14 +50,26 @@
 
 完成后只需告诉我“Supabase staging 已创建”，并可告诉我项目区域；不要发送密钥、连接字符串或截图中的敏感字段。届时我会给你下一步的数据库和身份认证配置。
 
-## 5. 费用和告警最低配置
+## 5. Render staging 部署顺序
+
+1. 完成 Render 银行卡验证。不得使用虚假地址或借用身份；银行卡号、CVV 和验证码不进入聊天、截图或 Git。
+2. 在 Render 选择 `New -> Blueprint`，连接 GitHub 仓库，并选择 `codex/wyth-cinematic-ui` 分支。
+3. Render 从仓库根目录读取 `render.yaml`。确认服务名为 `wyth-staging`，运行时为 Node，健康检查为 `/api/health`。
+4. 只在 Render 的 Environment/Secrets 页面填写 `APP_ORIGIN`、`SUPABASE_URL`、`SUPABASE_PUBLISHABLE_KEY`、`AUTH_RECOVERY_SECRET`、`DEEPSEEK_API_KEY`；不要把值发到聊天里。
+5. 首次部署使用 Render 分配的 HTTPS 地址作为 `APP_ORIGIN`。部署成功并完成冒烟测试后，再绑定 `staging.thewyth.com` 并同步更新 Render、Supabase 的允许 URL。
+6. 依次验证 `/api/health`、`/api/health/ready`、邮箱注册确认、登录、一次真实 DeepSeek 对话和退出登录。任何一步失败都先保留日志，不开放公开注册。
+7. staging 通过后再建立独立 production 服务；不得复用 staging 的 Supabase 项目、密钥或 Paddle 沙盒产品。
+
+银行卡验证尚未完成时可以继续本地测试和文档准备，但不能完成 Render 上的真实部署、Paddle webhook、正式回调 URL 或 Cloudflare 自定义域名验证。
+
+## 6. 费用和告警最低配置
 
 - 在每一个供应商后台打开账单邮件通知；分别给 staging 和 production 设置预算。
 - 前期只允许 staging 支出；production 没有完成回滚、监控和付款沙盒验证前不开放用户注册。
-- 每月检查 DeepSeek 用量、Railway 运行时、Supabase 数据库/存储、邮件发送量和错误率。
+- 每月检查 DeepSeek 用量、Render 运行时、Supabase 数据库/存储、邮件发送量和错误率。
 - USD 20 "Unlimited" 在产品文案和服务条款中必须说明为合理人类使用，保留防自动化与紧急成本保护。
 
-## 6. 上线前不可跳过的项目
+## 7. 上线前不可跳过的项目
 
 - HTTPS 自定义域名、邮件域名验证（SPF/DKIM/DMARC）和域名续费提醒。
 - 隐私政策、服务条款、退款/取消政策、AI 陪伴披露、未成年人非恋爱陪伴政策、推荐奖励规则。
@@ -65,16 +77,16 @@
 - 生产数据库备份、恢复演练、管理员 MFA、最小权限角色、操作审计和撤销员工/协作者权限的流程。
 - 支付必须通过获批的 Paddle 或 PayPal 真实账户；不得借用他人身份、伪造海外地址或使用虚假主体。
 
-## 7. 万一泄露或丢失访问权
+## 8. 万一泄露或丢失访问权
 
 1. 立即在对应平台撤销/轮换密钥，不要只修改本机文件。
 2. 检查部署日志、管理员登录记录和最近的支付 webhook。
 3. 从 Git 历史与公开仓库移除泄露内容后，仍然必须轮换密钥；删除文本不能让旧密钥失效。
 4. 暂停生产部署或支付入口，直到原因确认；不在公开公告中暴露用户信息或密钥细节。
 
-## 8. 你现在需要准备的非敏感信息
+## 9. 你现在需要准备的非敏感信息
 
 - 一个专门用于 Wyth 的邮箱地址，开启 MFA。
 - Wyth 的英文产品简介、客服邮箱、预计首发市场和支持语言。
-- 未来要购买的域名候选（不要急着购买不确定的域名）。
+- 已购买的 `thewyth.com` 域名及 Cloudflare 账号恢复方式；不要发送账号密码或恢复码。
 - 用于付款申请的真实个人资料和真实收款账户，只在 Paddle/PayPal 官方页面填写。

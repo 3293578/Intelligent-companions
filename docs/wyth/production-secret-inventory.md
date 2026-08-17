@@ -4,25 +4,25 @@
 
 | 变量名 | 用途 | staging 保存位置 | production 保存位置 | 能否进浏览器/Git |
 | --- | --- | --- | --- | --- |
-| `DEEPSEEK_API_KEY` | 平台统一管理的模型密钥 | Railway staging Variables | Railway production Variables | 否 |
-| `DEEPSEEK_MODEL` | 模型名称 | Railway staging Variables | Railway production Variables | 可公开名称，不放密钥文件 |
-| `SUPABASE_URL` | Supabase 项目地址 | Railway staging Variables | Railway production Variables | 公开 URL 可供前端；服务端另存一份 |
+| `DEEPSEEK_API_KEY` | 平台统一管理的模型密钥 | Render staging Environment | Render production Environment | 否 |
+| `DEEPSEEK_MODEL` | 模型名称 | Render staging Environment | Render production Environment | 可公开名称，不放密钥文件 |
+| `SUPABASE_URL` | Supabase 项目地址 | Render staging Environment | Render production Environment | 公开 URL 可供前端；服务端另存一份 |
 | `SUPABASE_PUBLISHABLE_KEY` | 浏览器登录/数据请求的受限公钥 | 前端构建环境 | 前端构建环境 | 可公开，但只能配合 RLS |
-| `SUPABASE_SECRET_KEY` | 服务器管理和 webhook 工作 | Railway staging Variables | Railway production Variables | 绝对禁止 |
-| `RESEND_API_KEY` | 验证、重置及账单邮件 | Railway staging Variables | Railway production Variables | 否 |
-| `SENTRY_DSN` | 错误上报配置 | Railway staging Variables | Railway production Variables | 只按 Sentry 官方建议配置 |
+| `SUPABASE_SECRET_KEY` | 服务器管理和 webhook 工作 | Render staging Environment | Render production Environment | 绝对禁止 |
+| `RESEND_API_KEY` | 验证、重置及账单邮件 | Render staging Environment | Render production Environment | 否 |
+| `SENTRY_DSN` | 错误上报配置 | Render staging Environment | Render production Environment | 只按 Sentry 官方建议配置 |
 | `SENTRY_AUTH_TOKEN` | 构建上传 source map | GitHub Actions Secrets | GitHub Actions Secrets | 否 |
-| `PADDLE_API_KEY` | Paddle 服务端 API | Railway staging Variables | Railway production Variables | 否 |
-| `PADDLE_WEBHOOK_SECRET` | 验证 Paddle webhook | Railway staging Variables | Railway production Variables | 否 |
-| `PADDLE_STANDARD_PRICE_ID` | Standard 套餐价格 ID | Railway staging Variables | Railway production Variables | 可公开，但按环境分开 |
-| `PADDLE_UNLIMITED_PRICE_ID` | Unlimited 套餐价格 ID | Railway staging Variables | Railway production Variables | 可公开，但按环境分开 |
-| `PADDLE_ENVIRONMENT` | `sandbox` 或 `production` | Railway staging Variables | Railway production Variables | 可公开 |
-| `PAYPAL_CLIENT_ID` | PayPal server checkout 标识 | Railway staging Variables | Railway production Variables | 前端仅在正式方案审核后按官方要求使用 |
-| `PAYPAL_CLIENT_SECRET` | PayPal 服务端密钥 | Railway staging Variables | Railway production Variables | 否 |
-| `PAYPAL_WEBHOOK_ID` | 验证 PayPal webhook | Railway staging Variables | Railway production Variables | 否 |
-| `APP_ORIGIN` | 允许的 Wyth 网站域名 | Railway staging Variables | Railway production Variables | 可公开 |
-| `ADMIN_BOOTSTRAP_EMAIL` | 首位 owner 初始化允许名单 | Railway staging Variables，一次性使用 | Railway production Variables，一次性使用 | 否 |
-| `AUTH_RECOVERY_SECRET` | 绑定一次性密码恢复会话的 HMAC 密钥（至少 32 随机字节） | Railway staging Variables | Railway production Variables | 绝对禁止 |
+| `PADDLE_API_KEY` | Paddle 服务端 API | Render staging Environment | Render production Environment | 否 |
+| `PADDLE_WEBHOOK_SECRET` | 验证 Paddle webhook | Render staging Environment | Render production Environment | 否 |
+| `PADDLE_STANDARD_PRICE_ID` | Standard 套餐价格 ID | Render staging Environment | Render production Environment | 可公开，但按环境分开 |
+| `PADDLE_UNLIMITED_PRICE_ID` | Unlimited 套餐价格 ID | Render staging Environment | Render production Environment | 可公开，但按环境分开 |
+| `PADDLE_ENVIRONMENT` | `sandbox` 或 `production` | Render staging Environment | Render production Environment | 可公开 |
+| `PAYPAL_CLIENT_ID` | PayPal server checkout 标识 | Render staging Environment | Render production Environment | 前端仅在正式方案审核后按官方要求使用 |
+| `PAYPAL_CLIENT_SECRET` | PayPal 服务端密钥 | Render staging Environment | Render production Environment | 否 |
+| `PAYPAL_WEBHOOK_ID` | 验证 PayPal webhook | Render staging Environment | Render production Environment | 否 |
+| `APP_ORIGIN` | 允许的 Wyth 网站域名 | Render staging Environment | Render production Environment | 可公开 |
+| `ADMIN_BOOTSTRAP_EMAIL` | 首位 owner 初始化允许名单 | Render staging Environment，一次性使用 | Render production Environment，一次性使用 | 否 |
+| `AUTH_RECOVERY_SECRET` | 绑定一次性密码恢复会话的 HMAC 密钥（至少 32 随机字节） | Render staging Environment | Render production Environment | 绝对禁止 |
 
 ## 操作规则
 

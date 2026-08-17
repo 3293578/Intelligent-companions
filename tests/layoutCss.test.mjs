@@ -187,6 +187,11 @@ test('account settings expose distinct loading, signed-out, recovery, and authen
   assert.match(appJs, /aria-invalid="true"/);
 });
 
+test('account status failures leave the loading state and distinguish provider outage from local mode', () => {
+  assert.match(appJs, /error\.code === 'auth_unavailable'[\s\S]{0,180}configured:\s*true[\s\S]{0,120}state:\s*'signed_out'/);
+  assert.match(appJs, /error\.code === 'auth_not_configured'[\s\S]{0,180}configured:\s*false[\s\S]{0,120}state:\s*'signed_out'/);
+});
+
 test('account outages can recover without exposing the protected diagnostics endpoint', () => {
   assert.match(appJs, /data-action="auth-retry"/);
   assert.match(appJs, /window\.addEventListener\('online'/);
@@ -204,8 +209,8 @@ test('account controls keep visible focus and dark-on-gold button contrast', () 
 });
 
 test('configured chat failures stay visible and do not create a browser-local assistant reply', () => {
-  assert.match(appJs, /error\.chatUnavailable/);
-  assert.match(appJs, /chatUiState\s*=\s*completeChatSend\([^,]+,[^,]+,\s*'error\.chatUnavailable'/);
+  assert.match(appJs, /chatFailureMessageKey/);
+  assert.match(appJs, /chatUiState\s*=\s*completeChatSend\([^,]+,[^,]+,\s*chatFailureMessageKey\(/);
   assert.doesNotMatch(appJs, /catch\s*\{[\s\S]*?createAssistantReply\(companion, userMessage, priorMessages\)[\s\S]*?local_fallback/);
 });
 

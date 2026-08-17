@@ -25,6 +25,7 @@ import {
   beginChatSend,
   buildRenderableMessages,
   canSendChatMessage,
+  chatFailureMessageKey,
   completeChatSend,
   countUnreadCompanionMessages,
   createDailyPushActions,
@@ -100,13 +101,28 @@ import {
   updateCreationDraft
 } from './creationFlowState.js';
 import { formatChatTimestamp } from './chatTime.js';
-import { createAuthUiState, parseAuthCallback, reduceAuthState } from './authBrowser.js';
+import { authenticatedStatusFromLogin, createAuthUiState, parseAuthCallback, reduceAuthState } from './authBrowser.js';
+import { accountStorageKey, migrateGuestStorage } from './accountStorage.js';
 
 const STORAGE_KEY = 'english-companions-state-v1';
 const MOTION_KEY = 'wyth-reduce-motion';
 const ONBOARDING_KEY = 'wyth-onboarding-v1';
 const SETTINGS_KEY = 'wyth-settings-v1';
 const NOTIFICATIONS_KEY = 'wyth-notifications-v1';
+const ACCOUNT_STORAGE_KEYS = Object.freeze([
+  STORAGE_KEY,
+  ONBOARDING_KEY,
+  SETTINGS_KEY,
+  NOTIFICATIONS_KEY,
+  `${STORAGE_KEY}-read-receipts`,
+  `${STORAGE_KEY}-saved-picks`,
+  `${STORAGE_KEY}-vocab-book`
+]);
+let storageOwnerId = '';
+
+function ownedStorageKey(baseKey) {
+  return accountStorageKey(baseKey, storageOwnerId);
+}
 
 const els = {
   companionList: document.querySelector('#companionList'),
@@ -179,14 +195,7 @@ let editingCompanionId = null;
 let creationFlow = createCreationFlow();
 let creationPresetId = 'friend';
 let avatarRequestState = { session: 0, token: 0 };
-let notificationPreferences = loadNotificationPreferences(localStorage, NOTIFICATIONS_KEY);
-notificationPreferences = normalizeNotificationPreferences({
-  ...notificationPreferences,
-  permission: typeof Notification === 'undefined' ? 'unsupported' : Notification.permission
-});
-if (['denied', 'unsupported'].includes(notificationPreferences.permission)) {
-  notificationPreferences = { ...notificationPreferences, enabled: false };
-}
+let notificationPreferences = loadOwnedNotificationPreferences();
 let schedulerStatus = {
   lastRunAt: null,
   lastNotifications: [],
@@ -254,7 +263,7 @@ function localCalendarDate(now = new Date()) {
 function loadOnboardingState() {
   const now = localCalendarDate();
   try {
-    const raw = localStorage.getItem(ONBOARDING_KEY);
+    const raw = localStorage.getItem(ownedStorageKey(ONBOARDING_KEY));
     if (raw) {
       const restored = deserializeOnboardingState(raw, now);
       if (state.companions.length > 0) return { ...restored, stage: 'complete', completed: true };
@@ -277,9 +286,9 @@ function loadOnboardingState() {
 
 function persistNextInterfaceState(nextOnboarding, nextState) {
   const result = persistInterfaceState(localStorage, {
-    onboardingKey: ONBOARDING_KEY,
+    onboardingKey: ownedStorageKey(ONBOARDING_KEY),
     onboardingValue: JSON.stringify(nextOnboarding),
-    stateKey: STORAGE_KEY,
+    stateKey: ownedStorageKey(STORAGE_KEY),
     stateValue: serializeState(nextState)
   });
   interfaceStorageErrorKey = result.ok ? '' : 'error.storageUnavailable';
@@ -362,52 +371,52 @@ function changeInterfaceLocale(locale, source) {
 }
 
 function loadState() {
-  const raw = localStorage.getItem(STORAGE_KEY);
+  const raw = localStorage.getItem(ownedStorageKey(STORAGE_KEY));
   const loaded = raw ? deserializeState(raw) : createEmptyState();
   if (!loaded.user) return { ...loaded, user: createSeedState().user };
   return loaded;
 }
 
 function saveState() {
-  localStorage.setItem(STORAGE_KEY, serializeState(state));
+  localStorage.setItem(ownedStorageKey(STORAGE_KEY), serializeState(state));
 }
 
 function loadReadReceipts() {
   try {
-    return JSON.parse(localStorage.getItem(`${STORAGE_KEY}-read-receipts`) || '{}');
+    return JSON.parse(localStorage.getItem(ownedStorageKey(`${STORAGE_KEY}-read-receipts`)) || '{}');
   } catch {
     return {};
   }
 }
 
 function saveReadReceipts() {
-  localStorage.setItem(`${STORAGE_KEY}-read-receipts`, JSON.stringify(readReceipts));
+  localStorage.setItem(ownedStorageKey(`${STORAGE_KEY}-read-receipts`), JSON.stringify(readReceipts));
 }
 
 function loadSavedPicks() {
   try {
-    return JSON.parse(localStorage.getItem(`${STORAGE_KEY}-saved-picks`) || '{}');
+    return JSON.parse(localStorage.getItem(ownedStorageKey(`${STORAGE_KEY}-saved-picks`)) || '{}');
   } catch {
     return {};
   }
 }
 
 function saveSavedPicks() {
-  localStorage.setItem(`${STORAGE_KEY}-saved-picks`, JSON.stringify(savedPicks));
+  localStorage.setItem(ownedStorageKey(`${STORAGE_KEY}-saved-picks`), JSON.stringify(savedPicks));
 }
 
 function loadVocabBook() {
-  return deserializeVocabBook(localStorage.getItem(`${STORAGE_KEY}-vocab-book`) || '[]');
+  return deserializeVocabBook(localStorage.getItem(ownedStorageKey(`${STORAGE_KEY}-vocab-book`)) || '[]');
 }
 
 function saveVocabBook() {
-  localStorage.setItem(`${STORAGE_KEY}-vocab-book`, serializeVocabBook(vocabBook));
+  localStorage.setItem(ownedStorageKey(`${STORAGE_KEY}-vocab-book`), serializeVocabBook(vocabBook));
 }
 
 function loadSettingsState() {
   let stored = {};
   try {
-    stored = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
+    stored = JSON.parse(localStorage.getItem(ownedStorageKey(SETTINGS_KEY)) || '{}');
   } catch {
     stored = {};
   }
@@ -421,8 +430,41 @@ function loadSettingsState() {
   });
 }
 
+function loadOwnedNotificationPreferences() {
+  let next = normalizeNotificationPreferences({
+    ...loadNotificationPreferences(localStorage, ownedStorageKey(NOTIFICATIONS_KEY)),
+    permission: typeof Notification === 'undefined' ? 'unsupported' : Notification.permission
+  });
+  if (['denied', 'unsupported'].includes(next.permission)) next = { ...next, enabled: false };
+  return next;
+}
+
+function switchLocalDataOwner(nextUserId = '') {
+  const nextOwner = String(nextUserId || '');
+  if (nextOwner === storageOwnerId) return false;
+  if (nextOwner && !storageOwnerId) migrateGuestStorage(localStorage, ACCOUNT_STORAGE_KEYS, nextOwner);
+  storageOwnerId = nextOwner;
+  state = loadState();
+  onboarding = loadOnboardingState();
+  notificationPreferences = loadOwnedNotificationPreferences();
+  readReceipts = loadReadReceipts();
+  savedPicks = loadSavedPicks();
+  vocabBook = loadVocabBook();
+  settingsState = loadSettingsState();
+  wythUiState = setReadingMode(createWythUiState(), settingsState.quick.readingMode);
+  editingCompanionId = null;
+  backendMemoryStatus = {};
+  chatUiState = { pendingCompanionId: null, error: '' };
+  pendingSelection = null;
+  activeTranslation = null;
+  activeSupportSignal = null;
+  supportTrigger = null;
+  reconcileInterfaceLocale();
+  return true;
+}
+
 function commitSettingsState(nextState) {
-  const result = persistQuickSettings(localStorage, SETTINGS_KEY, settingsState, nextState);
+  const result = persistQuickSettings(localStorage, ownedStorageKey(SETTINGS_KEY), settingsState, nextState);
   settingsState = result.state;
   interfaceStorageErrorKey = result.ok ? '' : 'error.storageUnavailable';
   return result.ok;
@@ -433,7 +475,7 @@ function saveSettingsState() {
 }
 
 function persistNotificationPreferences(next = notificationPreferences) {
-  if (!saveNotificationPreferences(localStorage, NOTIFICATIONS_KEY, next)) {
+  if (!saveNotificationPreferences(localStorage, ownedStorageKey(NOTIFICATIONS_KEY), next)) {
     interfaceStorageErrorKey = 'error.storageUnavailable';
     return false;
   }
@@ -1625,8 +1667,8 @@ async function sendMessage(content) {
   let reply;
   try {
     reply = await requestAssistantReply(updatedCompanion, userMessage, prior);
-  } catch {
-    chatUiState = completeChatSend(chatUiState, companion.id, 'error.chatUnavailable');
+  } catch (error) {
+    chatUiState = completeChatSend(chatUiState, companion.id, chatFailureMessageKey(error?.message));
     render();
     await refreshRuntimeStatus();
     return;
@@ -1730,12 +1772,25 @@ async function authRequest(path, body) {
 }
 
 async function refreshAuthStatus({ renderSettings = true } = {}) {
+  let storageChanged = false;
   try {
     const payload = await authRequest('/api/auth/status');
     authUiState = reduceAuthState(authUiState, { type: 'STATUS', payload });
+    const ownerId = payload.state === 'authenticated' ? payload.user?.id : '';
+    storageChanged = switchLocalDataOwner(ownerId);
   } catch (error) {
-    authUiState = reduceAuthState(authUiState, { type: 'ERROR', errorKey: authErrorKey(error.code) });
+    const connectionState = error.code === 'auth_unavailable'
+      ? { configured: true, state: 'signed_out' }
+      : error.code === 'auth_not_configured'
+        ? { configured: false, state: 'signed_out' }
+        : {};
+    authUiState = reduceAuthState(authUiState, {
+      type: 'ERROR',
+      errorKey: authErrorKey(error.code),
+      ...connectionState
+    });
   }
+  if (storageChanged) render();
   if (renderSettings && settingsState.surface === 'full' && settingsState.activeSection === 'account') renderFullSettings(activeCompanion());
 }
 
@@ -1781,8 +1836,11 @@ async function submitAuthForm(form) {
       await refreshAuthStatus({ renderSettings: false });
       authUiState = { ...authUiState, mode: 'login', noticeKey: 'auth.notice.passwordSaved' };
     } else {
-      await authRequest('/api/auth/login', { email: data.get('email'), password: data.get('password') });
-      await refreshAuthStatus({ renderSettings: false });
+      const loginPayload = await authRequest('/api/auth/login', { email: data.get('email'), password: data.get('password') });
+      const loginStatus = authenticatedStatusFromLogin(loginPayload);
+      if (!loginStatus) throw Object.assign(new Error('auth_failed'), { code: 'auth_failed' });
+      authUiState = reduceAuthState(authUiState, { type: 'STATUS', payload: loginStatus });
+      if (switchLocalDataOwner(loginStatus.user.id)) render();
     }
   } catch (error) {
     authInvalidField = authInvalidFieldFor(error.code);
@@ -1797,6 +1855,7 @@ async function logoutAccount() {
   renderFullSettings(activeCompanion());
   try {
     await authRequest('/api/auth/logout', {});
+    if (switchLocalDataOwner('')) render();
     await refreshAuthStatus({ renderSettings: false });
   } catch (error) {
     authUiState = reduceAuthState(authUiState, { type: 'ERROR', errorKey: authErrorKey(error.code) });

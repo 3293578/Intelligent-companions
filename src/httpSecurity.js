@@ -8,3 +8,17 @@ export function createSecurityHeaders({ production = false } = {}) {
     ...(production ? { 'strict-transport-security': 'max-age=31536000; includeSubDomains' } : {})
   };
 }
+
+export function staticCacheControl(pathname = '') {
+  const normalized = String(pathname).toLowerCase();
+  if (normalized === '/' || normalized.endsWith('/index.html')) {
+    return 'no-cache, no-store, must-revalidate';
+  }
+  if (/\.(?:css|js|mjs|json)$/.test(normalized)) {
+    return 'no-cache, must-revalidate';
+  }
+  if (/\.(?:avif|gif|ico|jpe?g|png|svg|webp|woff2?)$/.test(normalized)) {
+    return 'public, max-age=3600, must-revalidate';
+  }
+  return 'no-store';
+}

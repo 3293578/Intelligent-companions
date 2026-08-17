@@ -55,6 +55,64 @@ test('login validates the provider session and returns protected cookies', async
   assert.doesNotMatch(JSON.stringify(result), /access_token|refresh_token/);
 });
 
+test('login reuses the authenticated user returned by Supabase without a redundant lookup', async () => {
+  let userLookups = 0;
+  const authClient = {
+    async signIn() {
+      return {
+        access_token: 'access',
+        refresh_token: 'refresh',
+        expires_in: 3600,
+        user: { id: 'user-1', email: 'u@example.com', email_confirmed_at: '2026-08-12T00:00:00Z' }
+      };
+    },
+    async getUser() {
+      userLookups += 1;
+      throw new Error('redundant user lookup');
+    }
+  };
+  const handle = createAuthRouteHandler({ configured: true, authClient, appOrigin: origin });
+
+  const result = await handle(request('/api/auth/login', {
+    method: 'POST', body: { email: 'u@example.com', password: 'long-enough' }
+  }));
+
+  assert.equal(result.status, 200);
+  assert.equal(result.body.user.id, 'user-1');
+  assert.equal(userLookups, 0);
+});
+
+test('login seeds and logout clears the verified session cache', async () => {
+  const cacheCalls = [];
+  const sessionCache = {
+    get() { return null; },
+    set(token, user, expiresIn) { cacheCalls.push(['set', token, user.id, expiresIn]); },
+    delete(token) { cacheCalls.push(['delete', token]); }
+  };
+  const authClient = {
+    async signIn() {
+      return {
+        access_token: 'access', refresh_token: 'refresh', expires_in: 3600,
+        user: { id: 'user-1', email: 'u@example.com', email_confirmed_at: '2026-08-12T00:00:00Z' }
+      };
+    },
+    async logout() { return {}; }
+  };
+  const handle = createAuthRouteHandler({ configured: true, authClient, appOrigin: origin, sessionCache });
+
+  await handle(request('/api/auth/login', {
+    method: 'POST', body: { email: 'u@example.com', password: 'long-enough' }
+  }));
+  await handle(request('/api/auth/logout', {
+    method: 'POST', headers: { cookie: 'wyth_access=access; wyth_refresh=refresh' }
+  }));
+
+  assert.deepEqual(cacheCalls, [
+    ['set', 'access', 'user-1', 3600],
+    ['delete', 'access']
+  ]);
+});
+
 test('signup reports verification without revealing whether an account already exists', async () => {
   const calls = [];
   const authClient = {
@@ -142,6 +200,29 @@ test('status preserves the session during a transient provider outage instead of
   assert.equal(result.status, 503);
   assert.deepEqual(result.body, { error: 'auth_unavailable', retryable: true });
   assert.equal(result.cookies.length, 0);
+});
+
+test('status uses a single short provider lookup so account confirmation cannot hang the UI', async () => {
+  let lookupOptions;
+  const authClient = {
+    async getUser(_token, options) {
+      lookupOptions = options;
+      return { id: 'user-1', email: 'u@example.com', email_confirmed_at: '2026-08-12T00:00:00Z' };
+    }
+  };
+  const handle = createAuthRouteHandler({
+    configured: true,
+    authClient,
+    appOrigin: origin,
+    statusLookupTimeoutMs: 4_000
+  });
+
+  const result = await handle(request('/api/auth/status', {
+    headers: { cookie: 'wyth_access=access; wyth_refresh=refresh' }
+  }));
+
+  assert.equal(result.status, 200);
+  assert.deepEqual(lookupOptions, { maxAttempts: 1, timeoutMs: 4_000 });
 });
 
 test('cookie mutations reject cross-origin requests', async () => {

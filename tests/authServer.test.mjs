@@ -5,11 +5,37 @@ import {
   createAuthCookies,
   createRecoveryProof,
   createSupabaseAuthClient,
+  createVerifiedSessionCache,
   normalizeCredentials,
   parseAuthCookies,
   resolveAuthenticatedUser,
   verifyRecoveryProof
 } from '../src/authServer.js';
+
+test('verified session cache avoids repeated provider lookups without storing raw tokens', async () => {
+  let now = 1_000;
+  let lookups = 0;
+  const cache = createVerifiedSessionCache({ now: () => now, ttlMs: 5_000, maxEntries: 10 });
+  const authClient = {
+    async getUser() {
+      lookups += 1;
+      return { id: 'user-1', email: 'u@example.com', email_confirmed_at: '2026-08-12T00:00:00Z' };
+    }
+  };
+
+  const first = await resolveAuthenticatedUser('wyth_access=sensitive-access-token', authClient, { sessionCache: cache });
+  const second = await resolveAuthenticatedUser('wyth_access=sensitive-access-token', authClient, { sessionCache: cache });
+
+  assert.equal(first.user.id, 'user-1');
+  assert.equal(second.user.id, 'user-1');
+  assert.equal(lookups, 1);
+  assert.deepEqual(cache.snapshot(), { size: 1 });
+  assert.doesNotMatch(JSON.stringify(cache.snapshot()), /sensitive-access-token/);
+
+  now += 5_001;
+  await resolveAuthenticatedUser('wyth_access=sensitive-access-token', authClient, { sessionCache: cache });
+  assert.equal(lookups, 2);
+});
 
 test('credentials normalize email and reject malformed or weak input', () => {
   assert.deepEqual(normalizeCredentials({ email: '  USER@Example.COM ', password: 'long-enough' }), {

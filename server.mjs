@@ -17,15 +17,17 @@ import {
   publicModelConfig
 } from './src/modelConfig.js';
 import { createModelConfigStore } from './src/modelConfigStore.js';
-import { createProxyFetch } from './src/nodeProxyFetch.js';
+import { createNetworkFallbackFetch, createProxyFetch } from './src/nodeProxyFetch.js';
 import { createOpenAIResponsesClient } from './src/openaiClient.js';
 import { createCircuitBreaker, createInstrumentedLlmClient } from './src/llmReliability.js';
 import { createHealthPayload, createReadinessPayload, safeProxySummary } from './src/serverHealth.js';
-import { createSupabaseAuthClient, isAuthUnavailableError, resolveAuthenticatedUser } from './src/authServer.js';
+import { createSupabaseAuthClient, createVerifiedSessionCache, isAuthUnavailableError, resolveAuthenticatedUser } from './src/authServer.js';
 import { createAuthRouteHandler } from './src/authRoutes.js';
 import { isPublicApiPath, scopedMemoryId } from './src/apiAccess.js';
+import { clientIpFromRequest, createApiUsageLimiter, isMeteredApiPath } from './src/apiRateLimit.js';
 import { assertProductionEnvironment, resolveServerHost } from './src/runtimeConfig.js';
-import { createSecurityHeaders } from './src/httpSecurity.js';
+import { createSecurityHeaders, staticCacheControl } from './src/httpSecurity.js';
+import { safeRequestFailure } from './src/requestBoundary.js';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 try {
@@ -39,33 +41,45 @@ const port = Number(portFromFlag || process.env.PORT || 5173);
 assertProductionEnvironment(process.env);
 const host = resolveServerHost(process.env);
 const responseSecurityHeaders = createSecurityHeaders({ production: process.env.NODE_ENV === 'production' });
+const trustProxy = process.env.NODE_ENV === 'production' || process.env.TRUST_PROXY === '1';
+const apiUsageLimiter = createApiUsageLimiter({
+  userMinuteLimit: process.env.LLM_RATE_LIMIT_PER_MINUTE,
+  ipMinuteLimit: process.env.LLM_IP_RATE_LIMIT_PER_MINUTE,
+  userDailyLimit: process.env.LLM_DAILY_REQUEST_LIMIT
+});
+const configuredProxy = process.env.HTTPS_PROXY || process.env.HTTP_PROXY || process.env.ALL_PROXY || '';
+const localProxyFallback = process.env.NO_LOCAL_PROXY_FALLBACK === '1' ? '' : 'http://127.0.0.1:7890';
+const outboundProxy = configuredProxy || localProxyFallback;
+const outboundFetch = outboundProxy ? createProxyFetch(outboundProxy) : undefined;
 const appOrigin = String(process.env.APP_ORIGIN || `http://127.0.0.1:${port}`).replace(/\/$/, '');
 const supabaseUrl = String(process.env.SUPABASE_URL || '').trim();
 const supabasePublishableKey = String(process.env.SUPABASE_PUBLISHABLE_KEY || '').trim();
 const authConfigured = Boolean(supabaseUrl && supabasePublishableKey);
+const authSessionCache = createVerifiedSessionCache();
 const authClient = authConfigured
-  ? createSupabaseAuthClient({ supabaseUrl, publishableKey: supabasePublishableKey })
+  ? createSupabaseAuthClient({ supabaseUrl, publishableKey: supabasePublishableKey, fetchImpl: outboundFetch })
   : null;
 const authRoutes = createAuthRouteHandler({
   configured: authConfigured,
   authClient,
   appOrigin,
   secureCookies: process.env.NODE_ENV === 'production' || appOrigin.startsWith('https://'),
-  recoverySecret: process.env.AUTH_RECOVERY_SECRET || (process.env.NODE_ENV === 'production' ? '' : 'wyth-local-development-recovery')
+  recoverySecret: process.env.AUTH_RECOVERY_SECRET || (process.env.NODE_ENV === 'production' ? '' : 'wyth-local-development-recovery'),
+  sessionCache: authSessionCache
 });
 if (authConfigured && process.env.NODE_ENV === 'production' && !process.env.AUTH_RECOVERY_SECRET) {
   throw new Error('AUTH_RECOVERY_SECRET is required in production.');
 }
-const configuredProxy = process.env.HTTPS_PROXY || process.env.HTTP_PROXY || process.env.ALL_PROXY || '';
-const localProxyFallback = process.env.NO_LOCAL_PROXY_FALLBACK === '1' ? '' : 'http://127.0.0.1:7890';
-const outboundProxy = configuredProxy || localProxyFallback;
-const outboundFetch = outboundProxy ? createProxyFetch(outboundProxy) : undefined;
-// LLM traffic goes direct by default. DeepSeek and most relays are reachable
-// without a VPN proxy, and a dead local proxy would silently break chat and
-// translation with fallback replies. Set LLM_PROXY (or LLM_USE_PROXY=1 to
-// reuse the content proxy) if the model endpoint really needs one.
+// LLM traffic goes direct by default. If the operating environment rejects a
+// direct network connection, local development can retry through the already
+// trusted outbound proxy. Provider HTTP errors are never retried this way.
 const llmProxy = process.env.LLM_PROXY || (process.env.LLM_USE_PROXY === '1' ? outboundProxy : '');
-const llmFetch = llmProxy ? createProxyFetch(llmProxy) : globalThis.fetch;
+const llmFetch = llmProxy
+  ? createProxyFetch(llmProxy)
+  : createNetworkFallbackFetch({
+      primaryFetch: globalThis.fetch,
+      fallbackFetch: outboundFetch
+    });
 const environmentModelSelection = normalizeModelSelection({
   provider: process.env.LLM_PROVIDER || 'deepseek',
   model: process.env.LLM_MODEL || process.env.DEEPSEEK_MODEL || process.env.OPENAI_MODEL,
@@ -259,7 +273,8 @@ async function serveStatic(request, response) {
     const data = await readFile(filePath);
     response.writeHead(200, {
       ...responseSecurityHeaders,
-      'content-type': mimeTypes[path.extname(filePath)] || 'application/octet-stream'
+      'content-type': mimeTypes[path.extname(filePath)] || 'application/octet-stream',
+      'cache-control': staticCacheControl(requestedPath)
     });
     response.end(data);
   } catch {
@@ -268,7 +283,7 @@ async function serveStatic(request, response) {
   }
 }
 
-const server = http.createServer(async (request, response) => {
+async function handleRequest(request, response) {
   const requestUrl = new URL(request.url, appOrigin);
   if (request.url?.startsWith('/api/auth/')) {
     let body = {};
@@ -296,7 +311,8 @@ const server = http.createServer(async (request, response) => {
     }
     try {
       const authenticated = await resolveAuthenticatedUser(request.headers.cookie, authClient, {
-        secure: process.env.NODE_ENV === 'production' || appOrigin.startsWith('https://')
+        secure: process.env.NODE_ENV === 'production' || appOrigin.startsWith('https://'),
+        sessionCache: authSessionCache
       });
       authenticatedUser = authenticated.user;
       if (!authenticatedUser?.email_confirmed_at && !authenticatedUser?.confirmed_at) {
@@ -310,6 +326,20 @@ const server = http.createServer(async (request, response) => {
       } else {
         sendJson(response, { error: 'authentication_required' }, 401);
       }
+      return;
+    }
+  }
+  if (authConfigured && authenticatedUser && isMeteredApiPath(requestUrl.pathname)) {
+    const usage = apiUsageLimiter.consume({
+      userId: authenticatedUser.id,
+      ip: clientIpFromRequest(request, { trustProxy })
+    });
+    if (!usage.allowed) {
+      sendJson(response, {
+        error: usage.reason === 'daily_limit' ? 'daily_request_limit' : 'too_many_requests',
+        retryable: usage.reason !== 'daily_limit',
+        retryAfterMs: usage.retryAfterMs
+      }, 429);
       return;
     }
   }
@@ -381,22 +411,22 @@ const server = http.createServer(async (request, response) => {
     await sendJsonProxyResponse(response, proxyResponse);
     return;
   }
-  if (request.url?.startsWith('/api/translate')) {
+  if (requestUrl.pathname === '/api/translate') {
     const proxyResponse = await translateProxy(await proxyRequestFromNode(request));
     await sendJsonProxyResponse(response, proxyResponse);
     return;
   }
-  if (request.url?.startsWith('/api/language-assist')) {
+  if (requestUrl.pathname === '/api/language-assist') {
     const proxyResponse = await languageAssistProxy(await proxyRequestFromNode(request));
     await sendJsonProxyResponse(response, proxyResponse);
     return;
   }
-  if (request.url?.startsWith('/api/content')) {
+  if (requestUrl.pathname === '/api/content') {
     const proxyResponse = await contentProxy(await proxyRequestFromNode(request));
     await sendJsonProxyResponse(response, proxyResponse);
     return;
   }
-  if (request.url?.startsWith('/api/chat')) {
+  if (requestUrl.pathname === '/api/chat') {
     const proxyRequest = await proxyRequestFromNode(request);
     proxyRequest.authenticatedUser = authenticatedUser;
     const proxyResponse = await chatProxy(proxyRequest);
@@ -413,7 +443,23 @@ const server = http.createServer(async (request, response) => {
     await sendJsonProxyResponse(response, proxyResponse);
     return;
   }
+  if (requestUrl.pathname.startsWith('/api/')) {
+    sendJson(response, { error: 'not_found' }, 404);
+    return;
+  }
   await serveStatic(request, response);
+}
+
+const server = http.createServer((request, response) => {
+  handleRequest(request, response).catch((error) => {
+    const failure = safeRequestFailure(error);
+    console.error(JSON.stringify({ event: 'request_failure', status: failure.status }));
+    if (response.headersSent || response.writableEnded) {
+      response.destroy();
+      return;
+    }
+    sendJson(response, failure.body, failure.status);
+  });
 });
 
 server.listen(port, host, () => {
