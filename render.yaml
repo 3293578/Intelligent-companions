@@ -2,6 +2,7 @@ services:
   - type: web
     name: wyth-staging
     runtime: node
+    region: singapore
     plan: free
     buildCommand: npm ci
     startCommand: npm start
@@ -27,6 +28,6 @@ services:
       - key: SUPABASE_PUBLISHABLE_KEY
         sync: false
       - key: AUTH_RECOVERY_SECRET
-        sync: false
+        generateValue: true
       - key: DEEPSEEK_API_KEY
         sync: false
