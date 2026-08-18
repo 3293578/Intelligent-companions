@@ -82,7 +82,8 @@ import {
   normalizeBirthday,
   saveBirthday,
   selectOnboardingPath,
-  setInterfaceLocale
+  setInterfaceLocale,
+  shouldShowOnboarding
 } from './onboardingState.js';
 import {
   captureTranscriptView,
@@ -591,7 +592,10 @@ function render({ preserveView = false, skipSettings = false } = {}) {
 }
 
 function renderFirstUse() {
-  const visible = state.companions.length === 0;
+  const visible = shouldShowOnboarding({
+    companionCount: state.companions.length,
+    settingsSurface: settingsState.surface
+  });
   els.firstUse.hidden = !visible;
   if (!visible) return;
   const activeStage = ['welcome', 'language', 'birthday', 'companion'].includes(onboarding.stage)
@@ -760,15 +764,21 @@ function closeUtilityDrawer() {
   drawerTrigger = null;
 }
 
-function openFullSettingsSurface(section = settingsState.activeSection) {
+function openFullSettingsSurface(section = settingsState.activeSection, { focus = 'navigation' } = {}) {
   settingsView = captureSettingsView();
   settingsState = openFullSettings(settingsState, section);
+  renderFirstUse();
   els.fullSettings.classList.add('is-open');
   els.fullSettings.setAttribute('aria-hidden', 'false');
   els.fullSettings.removeAttribute('inert');
   setSettingsBackgroundInert(true);
   renderFullSettings(activeCompanion());
-  window.setTimeout(() => els.fullSettingsNav.querySelector('[aria-current="page"]')?.focus(), 0);
+  window.setTimeout(() => {
+    const focusTarget = focus === 'auth'
+      ? els.fullSettingsContent.querySelector('.auth-form input')
+      : els.fullSettingsNav.querySelector('[aria-current="page"]');
+    focusTarget?.focus();
+  }, 0);
 }
 
 function closeFullSettings() {
@@ -777,6 +787,7 @@ function closeFullSettings() {
   els.fullSettings.setAttribute('aria-hidden', 'true');
   els.fullSettings.setAttribute('inert', '');
   setSettingsBackgroundInert(false);
+  renderFirstUse();
   restoreSettingsView(settingsView);
   settingsView = null;
   if (settingsState.surface === 'quick') {
@@ -2858,7 +2869,7 @@ els.firstUse.addEventListener('click', (event) => {
     render();
     if (nextOnboarding.experience === 'returning') {
       authUiState = reduceAuthState(authUiState, { type: 'MODE', mode: 'login' });
-      openFullSettingsSurface('account');
+      openFullSettingsSurface('account', { focus: 'auth' });
     } else {
       els.firstUse.querySelector('[data-onboarding-stage="language"]')?.focus();
     }
@@ -2866,7 +2877,7 @@ els.firstUse.addEventListener('click', (event) => {
   }
   if (event.target.closest('[data-action="onboarding-login"]')) {
     authUiState = reduceAuthState(authUiState, { type: 'MODE', mode: 'login' });
-    openFullSettingsSurface('account');
+    openFullSettingsSurface('account', { focus: 'auth' });
     return;
   }
   const preset = event.target.closest('[data-preset-id]');
@@ -3044,7 +3055,7 @@ if (initialAuthCallback === 'none'
   && onboarding.experience === 'returning'
   && authUiState.state !== 'authenticated') {
   authUiState = reduceAuthState(authUiState, { type: 'MODE', mode: 'login' });
-  openFullSettingsSurface('account');
+  openFullSettingsSurface('account', { focus: 'auth' });
 }
 refreshRuntimeStatus();
 if (activeCompanion()) refreshMemoryStatus(activeCompanion().id);

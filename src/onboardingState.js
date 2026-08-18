@@ -72,6 +72,10 @@ export function selectOnboardingPath(state, experience) {
   };
 }
 
+export function shouldShowOnboarding({ companionCount = 0, settingsSurface = 'closed' } = {}) {
+  return Number(companionCount) === 0 && settingsSurface !== 'full';
+}
+
 export function calculateAge(birthday, now) {
   if (!isRealIsoDate(String(birthday ?? ''))) return null;
   const reference = parseCalendarDate(now);

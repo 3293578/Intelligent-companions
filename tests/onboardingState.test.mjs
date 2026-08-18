@@ -10,6 +10,7 @@ import {
   selectOnboardingPath,
   saveBirthday,
   setInterfaceLocale,
+  shouldShowOnboarding,
   updateProgressiveProfile
 } from '../src/onboardingState.js';
 
@@ -44,6 +45,12 @@ test('first-use choice sends new users into onboarding and returning users to si
   assert.equal(returning.experience, 'returning');
   assert.equal(returning.stage, 'welcome');
   assert.deepEqual(selectOnboardingPath(initial, 'invalid'), initial);
+});
+
+test('onboarding yields to full settings while a returning user signs in', () => {
+  assert.equal(shouldShowOnboarding({ companionCount: 0, settingsSurface: 'closed' }), true);
+  assert.equal(shouldShowOnboarding({ companionCount: 0, settingsSurface: 'full' }), false);
+  assert.equal(shouldShowOnboarding({ companionCount: 1, settingsSurface: 'closed' }), false);
 });
 
 test('validates real ISO birthdays and rejects malformed calendar dates', () => {
