@@ -22,7 +22,7 @@ services:
       - key: LLM_MODEL
         value: deepseek-chat
       - key: APP_ORIGIN
-        sync: false
+        value: https://staging.thewyth.com
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_PUBLISHABLE_KEY
