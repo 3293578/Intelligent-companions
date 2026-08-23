@@ -7,6 +7,7 @@ import {
   createOnboardingState,
   deserializeOnboardingState,
   normalizeBirthday,
+  resolveOnboardingStage,
   selectOnboardingPath,
   saveBirthday,
   setInterfaceLocale,
@@ -51,6 +52,33 @@ test('onboarding yields to full settings while a returning user signs in', () =>
   assert.equal(shouldShowOnboarding({ companionCount: 0, settingsSurface: 'closed' }), true);
   assert.equal(shouldShowOnboarding({ companionCount: 0, settingsSurface: 'full' }), false);
   assert.equal(shouldShowOnboarding({ companionCount: 1, settingsSurface: 'closed' }), false);
+});
+
+test('authenticated users skip the returning-user gate when local companions are empty', () => {
+  assert.equal(resolveOnboardingStage({
+    authState: 'authenticated',
+    companionCount: 0,
+    settingsSurface: 'closed',
+    stage: 'welcome'
+  }), 'companion');
+  assert.equal(resolveOnboardingStage({
+    authState: 'signed_out',
+    companionCount: 0,
+    settingsSurface: 'closed',
+    stage: 'welcome'
+  }), 'welcome');
+  assert.equal(resolveOnboardingStage({
+    authState: 'authenticated',
+    companionCount: 0,
+    settingsSurface: 'full',
+    stage: 'welcome'
+  }), '');
+  assert.equal(resolveOnboardingStage({
+    authState: 'authenticated',
+    companionCount: 1,
+    settingsSurface: 'closed',
+    stage: 'welcome'
+  }), '');
 });
 
 test('validates real ISO birthdays and rejects malformed calendar dates', () => {

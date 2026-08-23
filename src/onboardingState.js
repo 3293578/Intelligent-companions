@@ -76,6 +76,19 @@ export function shouldShowOnboarding({ companionCount = 0, settingsSurface = 'cl
   return Number(companionCount) === 0 && settingsSurface !== 'full';
 }
 
+export function resolveOnboardingStage({
+  authState = 'signed_out',
+  companionCount = 0,
+  settingsSurface = 'closed',
+  stage = 'welcome'
+} = {}) {
+  if (!shouldShowOnboarding({ companionCount, settingsSurface })) return '';
+  if (authState === 'authenticated') return 'companion';
+  return ['welcome', 'language', 'birthday', 'companion'].includes(stage)
+    ? stage
+    : 'companion';
+}
+
 export function calculateAge(birthday, now) {
   if (!isRealIsoDate(String(birthday ?? ''))) return null;
   const reference = parseCalendarDate(now);

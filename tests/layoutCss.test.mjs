@@ -405,6 +405,12 @@ test('first use distinguishes returning users and keeps an accessible sign-in sh
   assert.match(css, /\.onboarding-login:focus-visible/);
 });
 
+test('authenticated first use skips the returning gate and removes the redundant login shortcut', () => {
+  assert.match(appJs, /resolveOnboardingStage\(\{[\s\S]*?authState:\s*authUiState\.state/);
+  assert.match(appJs, /onboardingLoginButton\.hidden\s*=\s*authUiState\.state\s*===\s*'authenticated'/);
+  assert.match(appJs, /previousAuthState\s*!==\s*authUiState\.state\)\s*renderFirstUse\(\)/);
+});
+
 test('the active scene has a lightweight ambient canvas that pauses in quiet states', () => {
   assert.match(html, /id="sceneAtmosphere"/);
   assert.match(appJs, /requestAnimationFrame/);

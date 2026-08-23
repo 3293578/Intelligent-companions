@@ -80,10 +80,10 @@ import {
   createOnboardingState,
   deserializeOnboardingState,
   normalizeBirthday,
+  resolveOnboardingStage,
   saveBirthday,
   selectOnboardingPath,
-  setInterfaceLocale,
-  shouldShowOnboarding
+  setInterfaceLocale
 } from './onboardingState.js';
 import {
   captureTranscriptView,
@@ -592,15 +592,16 @@ function render({ preserveView = false, skipSettings = false } = {}) {
 }
 
 function renderFirstUse() {
-  const visible = shouldShowOnboarding({
+  const activeStage = resolveOnboardingStage({
+    authState: authUiState.state,
     companionCount: state.companions.length,
-    settingsSurface: settingsState.surface
+    settingsSurface: settingsState.surface,
+    stage: onboarding.stage
   });
+  const visible = Boolean(activeStage);
   els.firstUse.hidden = !visible;
   if (!visible) return;
-  const activeStage = ['welcome', 'language', 'birthday', 'companion'].includes(onboarding.stage)
-    ? onboarding.stage
-    : 'companion';
+  els.onboardingLoginButton.hidden = authUiState.state === 'authenticated';
   let activeSection = null;
   els.firstUse.querySelectorAll('[data-onboarding-stage]').forEach((section) => {
     section.hidden = section.dataset.onboardingStage !== activeStage;
@@ -1792,6 +1793,7 @@ async function authRequest(path, body) {
 
 async function refreshAuthStatus({ renderSettings = true } = {}) {
   let storageChanged = false;
+  const previousAuthState = authUiState.state;
   try {
     const payload = await authRequest('/api/auth/status');
     authUiState = reduceAuthState(authUiState, { type: 'STATUS', payload });
@@ -1810,6 +1812,7 @@ async function refreshAuthStatus({ renderSettings = true } = {}) {
     });
   }
   if (storageChanged) render();
+  else if (previousAuthState !== authUiState.state) renderFirstUse();
   if (renderSettings && settingsState.surface === 'full' && settingsState.activeSection === 'account') renderFullSettings(activeCompanion());
 }
 
