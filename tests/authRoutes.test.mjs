@@ -160,17 +160,26 @@ test('email confirmation reports a temporary provider outage without calling the
 });
 
 test('status refreshes an expired session and never returns token material', async () => {
+  let refreshOptions;
+  const lookupOptions = [];
   const authClient = {
-    async getUser(token) {
+    async getUser(token, options) {
+      lookupOptions.push(options);
       if (token === 'expired') throw Object.assign(new Error('auth_failed'), { code: 'auth_failed', status: 401 });
       return { id: 'user-1', email: 'u@example.com' };
     },
-    async refresh(token) {
+    async refresh(token, options) {
       assert.equal(token, 'refresh-old');
+      refreshOptions = options;
       return { access_token: 'next-access', refresh_token: 'next-refresh', expires_in: 3600 };
     }
   };
-  const handle = createAuthRouteHandler({ configured: true, authClient, appOrigin: origin });
+  const handle = createAuthRouteHandler({
+    configured: true,
+    authClient,
+    appOrigin: origin,
+    statusLookupTimeoutMs: 4_000
+  });
   const result = await handle(request('/api/auth/status', {
     headers: { cookie: 'wyth_access=expired; wyth_refresh=refresh-old' }
   }));
@@ -178,6 +187,11 @@ test('status refreshes an expired session and never returns token material', asy
   assert.equal(result.body.state, 'authenticated');
   assert.equal(result.cookies.length, 2);
   assert.doesNotMatch(JSON.stringify(result.body), /next-access|next-refresh/);
+  assert.deepEqual(refreshOptions, { maxAttempts: 1, timeoutMs: 4_000 });
+  assert.deepEqual(lookupOptions, [
+    { maxAttempts: 1, timeoutMs: 4_000 },
+    { maxAttempts: 1, timeoutMs: 4_000 }
+  ]);
 });
 
 test('status preserves the session during a transient provider outage instead of refreshing it', async () => {

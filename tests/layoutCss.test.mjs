@@ -509,3 +509,10 @@ test('first-use storage failures are announced and locale focus is restored', ()
 test('startup authentication refreshes an account surface opened while status is loading', () => {
   assert.match(appJs, /const initialAuthCallback = await handleAuthCallback\(\);\s*await refreshAuthStatus\(\{ renderSettings: true \}\);/);
 });
+
+test('account status checks use a short timeout while interactive auth keeps its cold-start allowance', () => {
+  assert.match(appJs, /const AUTH_REQUEST_TIMEOUT_MS\s*=\s*65_000/);
+  assert.match(appJs, /const AUTH_STATUS_TIMEOUT_MS\s*=\s*9_000/);
+  assert.match(appJs, /async function authRequest\(path, body, \{ timeoutMs = AUTH_REQUEST_TIMEOUT_MS \} = \{\}\)/);
+  assert.match(appJs, /authRequest\('\/api\/auth\/status', undefined, \{ timeoutMs: AUTH_STATUS_TIMEOUT_MS \}\)/);
+});

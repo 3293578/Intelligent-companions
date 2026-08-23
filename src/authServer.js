@@ -246,9 +246,13 @@ export function createSupabaseAuthClient(options = {}) {
     signIn(credentials) {
       return request('/token?grant_type=password', { body: normalizeCredentials(credentials) });
     },
-    refresh(refreshToken) {
+    refresh(refreshToken, requestOptions = {}) {
       if (!refreshToken) throw authError('session_missing', 401);
-      return request('/token?grant_type=refresh_token', { body: { refresh_token: refreshToken } });
+      return request('/token?grant_type=refresh_token', {
+        body: { refresh_token: refreshToken },
+        maxAttempts: requestOptions.maxAttempts ?? 1,
+        timeoutMs: requestOptions.timeoutMs ?? requestTimeoutMs
+      });
     },
     getUser(accessToken, requestOptions = {}) {
       if (!accessToken) throw authError('session_missing', 401);

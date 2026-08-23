@@ -111,6 +111,8 @@ const MOTION_KEY = 'wyth-reduce-motion';
 const ONBOARDING_KEY = 'wyth-onboarding-v1';
 const SETTINGS_KEY = 'wyth-settings-v1';
 const NOTIFICATIONS_KEY = 'wyth-notifications-v1';
+const AUTH_REQUEST_TIMEOUT_MS = 65_000;
+const AUTH_STATUS_TIMEOUT_MS = 9_000;
 const ACCOUNT_STORAGE_KEYS = Object.freeze([
   STORAGE_KEY,
   ONBOARDING_KEY,
@@ -1774,14 +1776,14 @@ function focusAuthFeedback() {
   });
 }
 
-async function authRequest(path, body) {
+async function authRequest(path, body, { timeoutMs = AUTH_REQUEST_TIMEOUT_MS } = {}) {
   let response;
   try {
     response = await fetch(path, {
       method: body === undefined ? 'GET' : 'POST',
       headers: body === undefined ? {} : { 'content-type': 'application/json' },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-      signal: AbortSignal.timeout(65_000)
+      signal: AbortSignal.timeout(timeoutMs)
     });
   } catch {
     throw Object.assign(new Error('auth_unavailable'), { code: 'auth_unavailable' });
@@ -1795,7 +1797,7 @@ async function refreshAuthStatus({ renderSettings = true } = {}) {
   let storageChanged = false;
   const previousAuthState = authUiState.state;
   try {
-    const payload = await authRequest('/api/auth/status');
+    const payload = await authRequest('/api/auth/status', undefined, { timeoutMs: AUTH_STATUS_TIMEOUT_MS });
     authUiState = reduceAuthState(authUiState, { type: 'STATUS', payload });
     const ownerId = payload.state === 'authenticated' ? payload.user?.id : '';
     storageChanged = switchLocalDataOwner(ownerId);

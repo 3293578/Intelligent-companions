@@ -75,8 +75,8 @@ export function createAuthRouteHandler(options = {}) {
     return createAuthCookies(session, { secure: secureCookies });
   }
 
-  async function sessionUser(session) {
-    const user = session?.user?.id ? session.user : await authClient.getUser(session.access_token);
+  async function sessionUser(session, requestOptions = {}) {
+    const user = session?.user?.id ? session.user : await authClient.getUser(session.access_token, requestOptions);
     sessionCache?.set(session.access_token, user, session.expires_in);
     return response(200, { configured: true, state: 'authenticated', user: publicUser(user) }, cookiesFor(session));
   }
@@ -127,7 +127,14 @@ export function createAuthRouteHandler(options = {}) {
         } catch (error) {
           if (!isRefreshableSessionError(error)) throw error;
           if (!authCookies.refreshToken) return response(200, { configured: true, state: 'expired' }, createClearedAuthCookies({ secure: secureCookies }));
-          return sessionUser(await authClient.refresh(authCookies.refreshToken));
+          const statusRequestOptions = {
+            maxAttempts: 1,
+            timeoutMs: statusLookupTimeoutMs
+          };
+          return sessionUser(
+            await authClient.refresh(authCookies.refreshToken, statusRequestOptions),
+            statusRequestOptions
+          );
         }
       }
 
