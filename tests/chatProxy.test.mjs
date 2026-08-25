@@ -277,6 +277,25 @@ test('configured chat proxy returns a retryable error instead of disguising LLM 
   assert.equal(body.reply, undefined);
 });
 
+test('chat proxy passes the authenticated request to its runtime client provider', async () => {
+  const companion = createCompanion({ name: 'Luna' });
+  const userMessage = createUserMessage(companion.id, 'Hi');
+  const seen = [];
+  const handler = createChatProxyHandler({
+    llmClientProvider(request) {
+      seen.push(request.authenticatedUser.id);
+      return async () => 'Authenticated reply.';
+    }
+  });
+  const response = await handler({
+    method: 'POST',
+    authenticatedUser: { id: 'u1' },
+    json: async () => ({ companion, userMessage, priorMessages: [] })
+  });
+  assert.equal((await response.json()).source, 'llm');
+  assert.deepEqual(seen, ['u1']);
+});
+
 test('chat proxy can namespace backend memory without changing public companion ids', async () => {
   const companion = createCompanion({ id: 'companion_shared', name: 'Luna', memoryEnabled: true });
   const userMessage = createUserMessage(companion.id, 'I like quiet mornings.');

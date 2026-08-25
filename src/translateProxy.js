@@ -103,9 +103,9 @@ function jsonResponse(body, status = 200) {
   };
 }
 
-function resolveLlmClient(options) {
+function resolveLlmClient(options, request) {
   if (typeof options.llmClientProvider === 'function') {
-    return options.llmClientProvider();
+    return options.llmClientProvider(request);
   }
   return options.llmClient;
 }
@@ -115,7 +115,7 @@ export function createTranslateProxyHandler(options = {}) {
     try {
       const parsed = await parseTranslateProxyRequest(request);
       const target = detectTranslationTarget(parsed.text, parsed.targetLanguage);
-      const llmClient = resolveLlmClient(options);
+      const llmClient = resolveLlmClient(options, request);
 
       if (typeof llmClient === 'function') {
         try {

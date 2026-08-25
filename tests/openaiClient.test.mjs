@@ -185,6 +185,28 @@ test('OpenAI Responses client returns empty text on API failure', async () => {
   );
 });
 
+test('LLM client reports provider token usage without changing the reply contract', async () => {
+  const usageEvents = [];
+  const client = createOpenAIResponsesClient({
+    apiKey: 'test-key',
+    onUsage: async (usage) => usageEvents.push(usage),
+    fetchImpl: async () => ({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: 'Measured reply.' } }],
+        usage: { prompt_tokens: 120, completion_tokens: 30, prompt_cache_hit_tokens: 20 }
+      })
+    })
+  });
+
+  assert.equal(await client([{ role: 'user', content: 'Hi' }]), 'Measured reply.');
+  assert.deepEqual(usageEvents, [{
+    inputTokens: 120,
+    cachedInputTokens: 20,
+    outputTokens: 30
+  }]);
+});
+
 test('LLM client preserves a safe provider error reason for diagnostics', async () => {
   const client = createOpenAIResponsesClient({
     apiKey: 'secret-that-must-not-leak',

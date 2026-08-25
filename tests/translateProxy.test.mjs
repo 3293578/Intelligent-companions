@@ -130,16 +130,22 @@ test('translate proxy handler falls back when the LLM client throws', async () =
 });
 
 test('translate proxy handler resolves a fresh client from the provider', async () => {
+  let receivedRequest;
   const handler = createTranslateProxyHandler({
-    llmClientProvider: () => async () => '{"translation":"你好","explanation":"","examples":[]}'
+    llmClientProvider: (request) => {
+      receivedRequest = request;
+      return async () => '{"translation":"你好","explanation":"","examples":[]}';
+    }
   });
 
-  const response = await handler({
+  const request = {
     method: 'POST',
     json: async () => ({ text: 'hello' })
-  });
+  };
+  const response = await handler(request);
   const body = await response.json();
 
+  assert.equal(receivedRequest, request);
   assert.equal(body.source, 'llm');
   assert.equal(body.result.translation, '你好');
 });

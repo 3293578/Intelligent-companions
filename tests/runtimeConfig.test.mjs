@@ -37,3 +37,15 @@ test('production refuses missing, placeholder, or insecure deployment values', (
     );
   }
 });
+
+test('production requires a server-only Supabase secret when commerce enforcement is enabled', () => {
+  assert.throws(
+    () => assertProductionEnvironment({ ...validProduction, COMMERCE_REQUIRED: '1' }),
+    /SUPABASE_SECRET_KEY/
+  );
+  assert.doesNotThrow(() => assertProductionEnvironment({
+    ...validProduction,
+    COMMERCE_REQUIRED: '1',
+    SUPABASE_SECRET_KEY: ['sb', 'secret', 'server-only-test-value'].join('_')
+  }));
+});

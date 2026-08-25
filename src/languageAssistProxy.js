@@ -57,7 +57,7 @@ export function createLanguageAssistProxyHandler(options = {}) {
   return async function handleLanguageAssist(request) {
     try {
       const parsed = await parseLanguageAssistRequest(request);
-      const llmClient = typeof options.llmClientProvider === 'function' ? options.llmClientProvider() : options.llmClient;
+      const llmClient = typeof options.llmClientProvider === 'function' ? options.llmClientProvider(request) : options.llmClient;
       if (typeof llmClient === 'function') {
         try {
           const result = parseLanguageAssistPayload(await llmClient(buildLanguageAssistMessages(parsed)));

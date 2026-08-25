@@ -1,7 +1,7 @@
 const MODEL_PROVIDER_PRESETS = {
   deepseek: {
     label: 'DeepSeek',
-    defaultModel: 'deepseek-chat',
+    defaultModel: 'deepseek-v4-flash',
     baseUrl: 'https://api.deepseek.com',
     apiMode: 'chat_completions',
     keyEnv: 'DEEPSEEK_API_KEY'

@@ -1,3 +1,5 @@
+import { normalizeProviderUsage } from './modelUsage.js';
+
 const DEFAULT_OPENAI_MODEL = 'deepseek-v4-flash';
 const DEFAULT_OPENAI_BASE_URL = 'https://api.deepseek.com';
 const DEFAULT_API_MODE = 'chat_completions';
@@ -168,7 +170,13 @@ export function createOpenAIResponsesClient(options = {}) {
       }),
       signal: AbortSignal.timeout(requestTimeoutMs)
     });
-    if (chatResponse?.ok) return extractChatCompletionText(await chatResponse.json());
+    if (chatResponse?.ok) {
+      const payload = await chatResponse.json();
+      if (typeof options.onUsage === 'function') {
+        await options.onUsage(normalizeProviderUsage(payload.usage));
+      }
+      return extractChatCompletionText(payload);
+    }
     throw await createRequestError(chatResponse, chatCompletionsUrl, apiKey);
   }
 
@@ -216,7 +224,11 @@ export function createOpenAIResponsesClient(options = {}) {
     });
 
     if (response?.ok) {
-      return extractResponseText(await response.json());
+      const payload = await response.json();
+      if (typeof options.onUsage === 'function') {
+        await options.onUsage(normalizeProviderUsage(payload.usage));
+      }
+      return extractResponseText(payload);
     }
 
     if ([400, 404, 405].includes(response?.status)) {

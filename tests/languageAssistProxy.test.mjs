@@ -37,3 +37,18 @@ test('language assist handler returns an LLM result', async () => {
   assert.equal(response.status, 200);
   assert.equal(body.result.naturalAlternative, 'I really like it.');
 });
+
+test('language assist passes the request to a fresh client provider', async () => {
+  let receivedRequest;
+  const handler = createLanguageAssistProxyHandler({
+    llmClientProvider(request) {
+      receivedRequest = request;
+      return async () => '{"naturalAlternative":"I really like it.","note":"Natural emphasis."}';
+    }
+  });
+  const request = { method: 'POST', json: async () => ({ text: 'I very like it' }) };
+  const response = await handler(request);
+
+  assert.equal(receivedRequest, request);
+  assert.equal((await response.json()).source, 'llm');
+});

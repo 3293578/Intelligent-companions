@@ -91,9 +91,9 @@ async function requestLlmContent(llmClient, messages) {
   return result;
 }
 
-function resolveLlmClient(options) {
+function resolveLlmClient(options, request) {
   if (typeof options.llmClientProvider === 'function') {
-    return options.llmClientProvider();
+    return options.llmClientProvider(request);
   }
   return options.llmClient;
 }
@@ -111,7 +111,7 @@ export function createChatProxyHandler(options = {}) {
           options.onMemoryError?.(error);
         }
       }
-      const llmClient = resolveLlmClient(options);
+      const llmClient = resolveLlmClient(options, request);
       let llmFailed = false;
       let lastLlmError = null;
       if (typeof llmClient === 'function') {

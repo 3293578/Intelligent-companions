@@ -15,10 +15,12 @@ test('Render staging blueprint uses the Node service, liveness health, and dashb
   assert.match(blueprint, /healthCheckPath:\s*\/api\/health/);
   assert.match(blueprint, /autoDeployTrigger:\s*commit/);
   assert.match(blueprint, /NO_LOCAL_PROXY_FALLBACK[\s\S]*value:\s*['"]?1/);
-  for (const key of ['APP_ORIGIN', 'SUPABASE_URL', 'SUPABASE_PUBLISHABLE_KEY', 'DEEPSEEK_API_KEY']) {
+  for (const key of ['APP_ORIGIN', 'SUPABASE_URL', 'SUPABASE_PUBLISHABLE_KEY', 'SUPABASE_SECRET_KEY', 'DEEPSEEK_API_KEY']) {
     assert.match(blueprint, new RegExp(`key:\\s*${key}[\\s\\S]{0,80}sync:\\s*false`));
   }
   assert.match(blueprint, /key:\s*AUTH_RECOVERY_SECRET[\s\S]{0,80}generateValue:\s*true/);
+  assert.match(blueprint, /key:\s*COMMERCE_REQUIRED[\s\S]{0,80}value:\s*['"]?0/);
+  assert.match(blueprint, /key:\s*LLM_MODEL[\s\S]{0,80}value:\s*deepseek-v4-flash/);
   assert.doesNotMatch(blueprint, /sb_publishable_[a-z0-9_-]{20,}|sk-[a-z0-9_-]{20,}|@qq\.com/i);
 });
 

@@ -36,5 +36,8 @@ export function assertProductionEnvironment(env = {}) {
   if (!hasRealValue(env.SUPABASE_PUBLISHABLE_KEY, 24)) invalid.push('SUPABASE_PUBLISHABLE_KEY');
   if (!hasRealValue(env.AUTH_RECOVERY_SECRET, 32)) invalid.push('AUTH_RECOVERY_SECRET');
   if (!hasRealValue(env.DEEPSEEK_API_KEY || env.LLM_API_KEY, 16)) invalid.push('DEEPSEEK_API_KEY');
+  if (env.COMMERCE_REQUIRED === '1' && !String(env.SUPABASE_SECRET_KEY || '').startsWith('sb_secret_')) {
+    invalid.push('SUPABASE_SECRET_KEY');
+  }
   if (invalid.length) throw new Error(`Invalid production environment: ${invalid.join(', ')}`);
 }

@@ -1,4 +1,5 @@
 import http from 'node:http';
+import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -28,6 +29,8 @@ import { clientIpFromRequest, createApiUsageLimiter, isMeteredApiPath } from './
 import { assertProductionEnvironment, resolveServerHost } from './src/runtimeConfig.js';
 import { createSecurityHeaders, staticCacheControl } from './src/httpSecurity.js';
 import { safeRequestFailure } from './src/requestBoundary.js';
+import { createSupabaseCommerceClient } from './src/supabaseCommerceClient.js';
+import { createCommerceRuntime } from './src/commerceRuntime.js';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 try {
@@ -54,6 +57,7 @@ const outboundFetch = outboundProxy ? createProxyFetch(outboundProxy) : undefine
 const appOrigin = String(process.env.APP_ORIGIN || `http://127.0.0.1:${port}`).replace(/\/$/, '');
 const supabaseUrl = String(process.env.SUPABASE_URL || '').trim();
 const supabasePublishableKey = String(process.env.SUPABASE_PUBLISHABLE_KEY || '').trim();
+const supabaseSecretKey = String(process.env.SUPABASE_SECRET_KEY || '').trim();
 const authConfigured = Boolean(supabaseUrl && supabasePublishableKey);
 const authSessionCache = createVerifiedSessionCache();
 const authClient = authConfigured
@@ -66,6 +70,20 @@ const authRoutes = createAuthRouteHandler({
   secureCookies: process.env.NODE_ENV === 'production' || appOrigin.startsWith('https://'),
   recoverySecret: process.env.AUTH_RECOVERY_SECRET || (process.env.NODE_ENV === 'production' ? '' : 'wyth-local-development-recovery'),
   sessionCache: authSessionCache
+});
+const commerceRequired = process.env.COMMERCE_REQUIRED === '1';
+const commerceClient = authConfigured && supabaseSecretKey
+  ? createSupabaseCommerceClient({ supabaseUrl, secretKey: supabaseSecretKey, fetchImpl: outboundFetch })
+  : null;
+const commerceRuntime = createCommerceRuntime({
+  client: commerceClient,
+  required: commerceRequired,
+  standardAllowanceUsd: process.env.STANDARD_ALLOWANCE_USD,
+  pricing: {
+    inputPerMillionUsd: process.env.DEEPSEEK_INPUT_PER_MILLION_USD,
+    cachedInputPerMillionUsd: process.env.DEEPSEEK_CACHED_INPUT_PER_MILLION_USD,
+    outputPerMillionUsd: process.env.DEEPSEEK_OUTPUT_PER_MILLION_USD
+  }
 });
 if (authConfigured && process.env.NODE_ENV === 'production' && !process.env.AUTH_RECOVERY_SECRET) {
   throw new Error('AUTH_RECOVERY_SECRET is required in production.');
@@ -98,6 +116,8 @@ const contentProxy = createContentProxyHandler({
   fetchImpl: outboundFetch
 });
 function createRuntimeLlmClient(overrides = {}) {
+  const requestId = randomUUID();
+  if (overrides.request) overrides.request.llmRequestId = requestId;
   const client = createOpenAIResponsesClient({
     apiKey: apiKeyForSelection(modelSelection, process.env, storedModelConfig.apiKeys),
     model: modelSelection.model,
@@ -105,13 +125,17 @@ function createRuntimeLlmClient(overrides = {}) {
     apiMode: modelSelection.apiMode,
     temperature: overrides.temperature,
     maxOutputTokens: overrides.maxOutputTokens,
-    fetchImpl: llmFetch
+    fetchImpl: llmFetch,
+    onUsage(usage) {
+      if (overrides.request) overrides.request.providerUsage = usage;
+    }
   });
   if (!client || overrides.operation !== 'chat') return client;
   return createInstrumentedLlmClient({
     client,
     circuit: chatCircuit,
     model: modelSelection.model,
+    createRequestId: () => requestId,
     onDiagnostic(diagnostic) {
       runtimeStatus.lastLlmDiagnostic = diagnostic;
       console.warn(JSON.stringify({ event: 'llm_failure', ...diagnostic }));
@@ -126,8 +150,8 @@ const chatProxy = createChatProxyHandler({
   allowLocalFallback: process.env.ALLOW_LOCAL_FALLBACK === '1',
   // DeepSeek recommends a higher temperature for conversational use; this
   // keeps companion replies varied and human instead of template-flat.
-  llmClientProvider: () => createRuntimeLlmClient({
-    operation: 'chat', temperature: 1.1, maxOutputTokens: 500
+  llmClientProvider: (request) => createRuntimeLlmClient({
+    operation: 'chat', temperature: 1.1, maxOutputTokens: 500, request
   }),
   onMemoryError(error) {
     console.warn(`Memory update failed; continuing chat without backend memory: ${error.message}`);
@@ -304,6 +328,7 @@ async function handleRequest(request, response) {
     return;
   }
   let authenticatedUser = null;
+  let commercialAccess = null;
   if (authConfigured && requestUrl.pathname.startsWith('/api/') && !isPublicApiPath(requestUrl.pathname)) {
     if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method) && request.headers.origin !== appOrigin) {
       sendJson(response, { error: 'invalid_origin' }, 403);
@@ -326,6 +351,23 @@ async function handleRequest(request, response) {
       } else {
         sendJson(response, { error: 'authentication_required' }, 401);
       }
+      return;
+    }
+  }
+  if (authConfigured && authenticatedUser && isMeteredApiPath(requestUrl.pathname)) {
+    try {
+      commercialAccess = await commerceRuntime.checkAccess(authenticatedUser.id);
+    } catch {
+      sendJson(response, { error: 'commerce_unavailable', retryable: true }, 503);
+      return;
+    }
+    if (!commercialAccess.allowed) {
+      const unavailable = commercialAccess.reason === 'commerce_unavailable';
+      sendJson(response, {
+        error: commercialAccess.reason,
+        retryable: unavailable,
+        plan: commercialAccess.plan
+      }, unavailable ? 503 : 402);
       return;
     }
   }
@@ -374,6 +416,10 @@ async function handleRequest(request, response) {
         mode: 'bounded-local-json',
         maxStore: 'per companion profile is capped by memoryStore limits',
         path: process.env.MEMORY_STORE_PATH ? 'custom' : '.local-data/memory.json'
+      },
+      commerce: {
+        configured: Boolean(commerceClient),
+        required: commerceRequired
       }
     });
     return;
@@ -416,6 +462,15 @@ async function handleRequest(request, response) {
     await sendJsonProxyResponse(response, proxyResponse);
     return;
   }
+  if (requestUrl.pathname === '/api/commerce/status' && request.method === 'GET') {
+    try {
+      const access = await commerceRuntime.checkAccess(authenticatedUser.id);
+      sendJson(response, { configured: Boolean(commerceClient), required: commerceRequired, access });
+    } catch {
+      sendJson(response, { error: 'commerce_unavailable', retryable: true }, 503);
+    }
+    return;
+  }
   if (requestUrl.pathname === '/api/language-assist') {
     const proxyResponse = await languageAssistProxy(await proxyRequestFromNode(request));
     await sendJsonProxyResponse(response, proxyResponse);
@@ -429,12 +484,29 @@ async function handleRequest(request, response) {
   if (requestUrl.pathname === '/api/chat') {
     const proxyRequest = await proxyRequestFromNode(request);
     proxyRequest.authenticatedUser = authenticatedUser;
+    proxyRequest.commercialAccess = commercialAccess;
     const proxyResponse = await chatProxy(proxyRequest);
     try {
       const body = await proxyResponse.json();
       runtimeStatus.lastChatSource = body.source || null;
       runtimeStatus.lastChatAt = new Date().toISOString();
       if (body.source === 'llm') runtimeStatus.lastLlmDiagnostic = null;
+      if (body.source === 'llm' && commerceClient) {
+        try {
+          await commerceRuntime.recordSuccessfulUse({
+            userId: authenticatedUser.id,
+            access: commercialAccess,
+            requestId: proxyRequest.llmRequestId,
+            operation: 'chat',
+            provider: modelSelection.provider,
+            model: modelSelection.model,
+            usage: proxyRequest.providerUsage
+          });
+        } catch {
+          sendJson(response, { error: 'commerce_unavailable', retryable: true }, 503);
+          return;
+        }
+      }
       sendJson(response, body, proxyResponse.status);
       return;
     } catch {
