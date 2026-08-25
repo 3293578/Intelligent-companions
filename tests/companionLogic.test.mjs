@@ -523,12 +523,12 @@ test('notification preview respects quiet hours', () => {
   const allowed = previewNotification(companion, push, {
     enabled: true,
     quietHours: { enabled: true, start: '23:00', end: '07:00' },
-    now: '2026-07-03T08:30:00'
+    now: '2026-07-03T08:30:00Z'
   });
   const muted = previewNotification(companion, push, {
     enabled: true,
     quietHours: { enabled: true, start: '23:00', end: '07:00' },
-    now: '2026-07-03T23:30:00'
+    now: '2026-07-03T23:30:00Z'
   });
 
   assert.equal(allowed.muted, false);
@@ -577,12 +577,12 @@ test('scheduled daily pushes run only after companion schedule time', () => {
   };
 
   const early = runScheduledDailyPushes(state, {
-    now: '2026-07-03T07:30:00',
+    now: '2026-07-03T07:30:00Z',
     proactiveContactOverride: 'off',
     notificationPreferences: { enabled: true }
   });
   const onTime = runScheduledDailyPushes(state, {
-    now: '2026-07-03T08:05:00',
+    now: '2026-07-03T08:05:00Z',
     proactiveContactOverride: 'off',
     notificationPreferences: { enabled: true }
   });
@@ -605,7 +605,7 @@ test('scheduled daily pushes respect maxDaily per companion per day', () => {
   });
   const existingPush = {
     ...createDailyPush(companion),
-    createdAt: '2026-07-03T08:10:00'
+    createdAt: '2026-07-03T08:10:00Z'
   };
   const state = {
     selectedCompanionId: companion.id,
@@ -614,7 +614,7 @@ test('scheduled daily pushes respect maxDaily per companion per day', () => {
   };
 
   const result = runScheduledDailyPushes(state, {
-    now: '2026-07-03T19:00:00',
+    now: '2026-07-03T19:00:00Z',
     proactiveContactOverride: 'off',
     notificationPreferences: { enabled: true }
   });
@@ -638,7 +638,7 @@ test('scheduled daily pushes can use companion-specific retrieved sources', () =
   };
 
   const result = runScheduledDailyPushes(state, {
-    now: '2026-07-03T08:05:00',
+    now: '2026-07-03T08:05:00Z',
     proactiveContactOverride: 'off',
     notificationPreferences: { enabled: true },
     sourcesByCompanion: {
@@ -878,7 +878,7 @@ test('custom keywords create fallback curated content when no source matches fix
   });
 
   const curated = curateContentForCompanion(companion, []);
-  const push = createDailyPush(companion, { sources: [], now: '2026-07-03T08:00:00' });
+  const push = createDailyPush(companion, { sources: [], now: '2026-07-03T08:00:00Z' });
 
   assert.equal(curated.length, 2);
   assert.deepEqual(curated.map((item) => item.keyword), ['cooking', 'travel']);
@@ -1331,7 +1331,7 @@ test('scheduled care check-in is generated in the companion practice language', 
   });
   const state = { user: null, selectedCompanionId: korean.id, companions: [korean], messages: [] };
   // Use an even day so the daily check-in fires deterministically.
-  const result = runScheduledDailyPushes(state, { now: '2026-07-06T09:00:00' });
+  const result = runScheduledDailyPushes(state, { now: '2026-07-06T09:00:00Z' });
   const checkIn = result.messages.find((m) => m.metadata?.kind === 'care_check_in');
 
   assert.ok(checkIn, 'expected a care check-in to be generated');

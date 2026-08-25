@@ -104,6 +104,7 @@ import {
 } from './creationFlowState.js';
 import { formatChatTimestamp } from './chatTime.js';
 import { authErrorKey, authenticatedStatusFromLogin, createAuthUiState, parseAuthCallback, reduceAuthState } from './authBrowser.js';
+import { withAuthDeadline } from './authDeadline.js';
 import { accountStorageKey, migrateGuestStorage } from './accountStorage.js';
 
 const STORAGE_KEY = 'english-companions-state-v1';
@@ -1778,13 +1779,20 @@ function focusAuthFeedback() {
 
 async function authRequest(path, body, { timeoutMs = AUTH_REQUEST_TIMEOUT_MS } = {}) {
   let response;
+  const controller = new AbortController();
   try {
-    response = await fetch(path, {
-      method: body === undefined ? 'GET' : 'POST',
-      headers: body === undefined ? {} : { 'content-type': 'application/json' },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-      signal: AbortSignal.timeout(timeoutMs)
-    });
+    response = await withAuthDeadline(
+      () => fetch(path, {
+        method: body === undefined ? 'GET' : 'POST',
+        headers: body === undefined ? {} : { 'content-type': 'application/json' },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        signal: controller.signal
+      }),
+      {
+        timeoutMs,
+        onTimeout: () => controller.abort()
+      }
+    );
   } catch {
     throw Object.assign(new Error('auth_unavailable'), { code: 'auth_unavailable' });
   }

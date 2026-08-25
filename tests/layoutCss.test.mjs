@@ -515,4 +515,5 @@ test('account status checks use a short timeout while interactive auth keeps its
   assert.match(appJs, /const AUTH_STATUS_TIMEOUT_MS\s*=\s*9_000/);
   assert.match(appJs, /async function authRequest\(path, body, \{ timeoutMs = AUTH_REQUEST_TIMEOUT_MS \} = \{\}\)/);
   assert.match(appJs, /authRequest\('\/api\/auth\/status', undefined, \{ timeoutMs: AUTH_STATUS_TIMEOUT_MS \}\)/);
+  assert.match(appJs, /withAuthDeadline\([\s\S]*onTimeout:\s*\(\)\s*=>\s*controller\.abort\(\)/);
 });

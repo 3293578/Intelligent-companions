@@ -20,21 +20,21 @@ test('companionsDueForPush returns only companions whose push time has arrived',
   const evening = createCompanion({ id: 'c_evening', name: 'Alex', pushTime: '19:30', maxDaily: 1 });
   const state = stateWith([morning, evening]);
 
-  const due = companionsDueForPush(state, { now: '2026-07-06T10:00:00' });
+  const due = companionsDueForPush(state, { now: '2026-07-06T10:00:00Z' });
 
   assert.deepEqual(due.map((companion) => companion.id), ['c_morning']);
 });
 
 test('companionsDueForPush skips companions that already reached maxDaily today', () => {
   const luna = createCompanion({ id: 'c_luna', name: 'Luna', pushTime: '08:00', maxDaily: 1 });
-  const now = '2026-07-06T10:00:00';
+  const now = '2026-07-06T10:00:00Z';
   const state = stateWith([luna], [
     {
       id: 'push_1',
       companionId: luna.id,
       role: 'system_push',
       content: 'Daily Pick already sent.',
-      createdAt: '2026-07-06T08:01:00'
+      createdAt: '2026-07-06T08:01:00Z'
     }
   ]);
 
@@ -49,11 +49,11 @@ test('companionsDueForPush allows more pushes when maxDaily is not reached', () 
       companionId: luna.id,
       role: 'system_push',
       content: 'First push today.',
-      createdAt: '2026-07-06T08:01:00'
+      createdAt: '2026-07-06T08:01:00Z'
     }
   ]);
 
-  const due = companionsDueForPush(state, { now: '2026-07-06T10:00:00' });
+  const due = companionsDueForPush(state, { now: '2026-07-06T10:00:00Z' });
   assert.deepEqual(due.map((companion) => companion.id), ['c_luna']);
 });
 
@@ -65,10 +65,10 @@ test('companionsDueForPush counts pushes per day, so yesterday does not block to
       companionId: luna.id,
       role: 'system_push',
       content: 'Push from yesterday.',
-      createdAt: '2026-07-05T08:01:00'
+      createdAt: '2026-07-05T08:01:00Z'
     }
   ]);
 
-  const due = companionsDueForPush(state, { now: '2026-07-06T09:00:00' });
+  const due = companionsDueForPush(state, { now: '2026-07-06T09:00:00Z' });
   assert.deepEqual(due.map((companion) => companion.id), ['c_luna']);
 });
