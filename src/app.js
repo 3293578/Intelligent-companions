@@ -183,6 +183,7 @@ const els = {
   avatarPreview: document.querySelector('#avatarPreview')
   ,
   firstUse: document.querySelector('#firstUse'),
+  onboardingLoginButton: document.querySelector('#onboardingLoginButton'),
   sceneAtmosphere: document.querySelector('#sceneAtmosphere'),
   interfaceLanguageSwitch: document.querySelector('#interfaceLanguageSwitch'),
   onboardingBirthdayForm: document.querySelector('#onboardingBirthdayForm'),

@@ -398,6 +398,7 @@ test('first use distinguishes returning users and keeps an accessible sign-in sh
   assert.match(html, /data-onboarding-path="new"/);
   assert.match(html, /data-onboarding-path="returning"/);
   assert.match(html, /id="onboardingLoginButton"[^>]*type="button"/);
+  assert.match(appJs, /onboardingLoginButton:\s*document\.querySelector\('#onboardingLoginButton'\)/);
   assert.match(appJs, /firstUse\.setAttribute\('aria-labelledby',\s*activeHeading\.id\)/);
   assert.match(appJs, /selectOnboardingPath/);
   assert.match(appJs, /stage:\s*hasExistingCompanions\s*\?\s*'complete'\s*:\s*'welcome'/);
