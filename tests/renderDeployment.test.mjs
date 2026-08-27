@@ -18,6 +18,12 @@ test('Render staging blueprint uses the Node service, liveness health, and dashb
   for (const key of ['APP_ORIGIN', 'SUPABASE_URL', 'SUPABASE_PUBLISHABLE_KEY', 'SUPABASE_SECRET_KEY', 'DEEPSEEK_API_KEY']) {
     assert.match(blueprint, new RegExp(`key:\\s*${key}[\\s\\S]{0,80}sync:\\s*false`));
   }
+  for (const key of ['PADDLE_API_KEY', 'PADDLE_WEBHOOK_SECRET']) {
+    assert.match(blueprint, new RegExp(`key:\\s*${key}[\\s\\S]{0,80}sync:\\s*false`));
+  }
+  assert.match(blueprint, /key:\s*PADDLE_ENVIRONMENT[\s\S]{0,80}value:\s*sandbox/);
+  assert.match(blueprint, /key:\s*PADDLE_STANDARD_PRICE_ID[\s\S]{0,100}pri_01kzszqc8792n88p0c90jd5r8c/);
+  assert.match(blueprint, /key:\s*PADDLE_UNLIMITED_PRICE_ID[\s\S]{0,100}pri_01kzszytcn2m8wdsgbqeasyrbh/);
   assert.match(blueprint, /key:\s*AUTH_RECOVERY_SECRET[\s\S]{0,80}generateValue:\s*true/);
   assert.match(blueprint, /key:\s*COMMERCE_REQUIRED[\s\S]{0,80}value:\s*['"]?0/);
   assert.match(blueprint, /key:\s*LLM_MODEL[\s\S]{0,80}value:\s*deepseek-v4-flash/);
@@ -41,6 +47,15 @@ test('hosted paid operations use authenticated user and trusted client-IP rate l
     assert.doesNotMatch(server, new RegExp(`startsWith\\(['\"]\\/api\\/${route}`));
   }
   assert.match(server, /requestUrl\.pathname\.startsWith\(['"]\/api\/['"]\)[\s\S]{0,160}not_found/);
+});
+
+test('Paddle checkout is authenticated while the raw signed webhook endpoint is public', () => {
+  const server = fs.readFileSync(path.join(root, 'server.mjs'), 'utf8');
+  assert.match(server, /createBillingRouteHandler/);
+  assert.match(server, /requestUrl\.pathname === ['"]\/api\/billing\/checkout['"]/);
+  assert.match(server, /requestUrl\.pathname === ['"]\/api\/billing\/paddle\/webhook['"]/);
+  assert.match(server, /paddle-signature/);
+  assert.match(server, /await readBody\(request\)/);
 });
 
 test('Supabase auth shares the configured outbound path and LLM has a network-only fallback', () => {

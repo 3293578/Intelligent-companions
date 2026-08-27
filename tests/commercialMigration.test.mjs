@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 
 const migration = await readFile(new URL('../supabase/migrations/20260825102753_commercial_entitlement_foundation.sql', import.meta.url), 'utf8');
 const serverFunctions = await readFile(new URL('../supabase/migrations/20260825103436_commercial_server_functions.sql', import.meta.url), 'utf8');
+const paddleFunctions = await readFile(new URL('../supabase/migrations/20260827120000_paddle_subscription_events.sql', import.meta.url), 'utf8');
 
 const clientOwnedTables = ['profiles', 'user_preferences', 'vocabulary_items'];
 const serverOwnedTables = ['subscriptions', 'entitlement_periods', 'usage_events', 'webhook_events'];
@@ -13,6 +14,17 @@ test('every public commercial table enables row level security and denies anonym
     assert.match(migration, new RegExp(`alter table public\\.${table} enable row level security;`));
     assert.match(migration, new RegExp(`revoke all on table public\\.${table} from anon;`));
   }
+});
+
+test('Paddle subscription webhook updates are atomic, idempotent, and server-only', () => {
+  assert.match(paddleFunctions, /create function public\.apply_paddle_subscription_event/i);
+  assert.match(paddleFunctions, /on conflict \(provider, provider_event_id\) do nothing/i);
+  assert.match(paddleFunctions, /on conflict \(provider, provider_subscription_id\) do update/i);
+  assert.match(paddleFunctions, /last_provider_event_at timestamptz/i);
+  assert.match(paddleFunctions, /where excluded\.last_provider_event_at >= public\.subscriptions\.last_provider_event_at/i);
+  assert.match(paddleFunctions, /grant execute on function public\.apply_paddle_subscription_event[\s\S]*to service_role/i);
+  assert.match(paddleFunctions, /revoke all on function public\.apply_paddle_subscription_event[\s\S]*from public, anon, authenticated/i);
+  assert.doesNotMatch(paddleFunctions, /chat|prompt|message_content/i);
 });
 
 test('all user-visible policies bind rows to the authenticated user id', () => {

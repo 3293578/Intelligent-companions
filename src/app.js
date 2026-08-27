@@ -120,6 +120,7 @@ const SETTINGS_KEY = 'wyth-settings-v1';
 const NOTIFICATIONS_KEY = 'wyth-notifications-v1';
 const AUTH_REQUEST_TIMEOUT_MS = 65_000;
 const AUTH_STATUS_TIMEOUT_MS = 9_000;
+const BILLING_PLANS = Object.freeze(['standard', 'unlimited']);
 const ACCOUNT_STORAGE_KEYS = Object.freeze([
   STORAGE_KEY,
   ONBOARDING_KEY,
@@ -235,6 +236,13 @@ let modelSettingsState = {
 let authUiState = createAuthUiState();
 let authFormEmail = '';
 let authInvalidField = '';
+let billingUiState = {
+  loading: false,
+  configured: false,
+  access: null,
+  errorKey: '',
+  checkoutPlan: ''
+};
 let backendMemoryStatus = {};
 let chatUiState = {
   pendingCompanionId: null,
@@ -1124,6 +1132,31 @@ function settingsStatus(key, value = 'settings.status.active') {
   return `<span class="settings-status settings-status-${key}">${tr(value)}</span>`;
 }
 
+function renderBillingSettings() {
+  const access = billingUiState.access || {};
+  const planKey = BILLING_PLANS.includes(access.plan) ? `billing.plan.${access.plan}` : 'billing.plan.none';
+  const checkoutDisabled = !billingUiState.configured || billingUiState.loading;
+  const status = billingUiState.loading
+    ? settingsStatus('coming', 'billing.checking')
+    : billingUiState.configured
+      ? settingsStatus('active', planKey)
+      : settingsStatus('coming', 'billing.notConfiguredShort');
+  return `<div class="studio-card billing-card" aria-busy="${billingUiState.loading}">
+    <div class="studio-row"><h3>${tr('billing.title')}</h3>${status}</div>
+    <p class="studio-muted">${tr('billing.trial')}</p>
+    ${billingUiState.errorKey ? `<p class="auth-error" role="alert">${tr(billingUiState.errorKey)}</p>` : ''}
+    ${!billingUiState.configured && !billingUiState.loading ? `<p class="studio-muted">${tr('billing.notConfigured')}</p>` : ''}
+    <div class="quick-actions billing-plans">
+      <button class="secondary-action" type="button" data-action="billing-checkout" data-plan="standard" ${checkoutDisabled ? 'disabled' : ''}>
+        <strong>${tr('billing.standard.title')}</strong><span>${tr('billing.standard.description')}</span>
+      </button>
+      <button class="secondary-action" type="button" data-action="billing-checkout" data-plan="unlimited" ${checkoutDisabled ? 'disabled' : ''}>
+        <strong>${tr('billing.unlimited.title')}</strong><span>${tr('billing.unlimited.fairUse')}</span>
+      </button>
+    </div>
+  </div>`;
+}
+
 function renderAccountSettings() {
   const llm = runtimeStatus.llm || {};
   const accountContent = authUiState.mode === 'password'
@@ -1150,6 +1183,7 @@ function renderAccountSettings() {
       <header><div><span class="eyebrow">${tr('settings.full.account')}</span><h3 id="settings-account-heading" tabindex="-1">${tr(headingKey)}</h3></div>${settingsStatus(authUiState.state === 'authenticated' ? 'active' : 'coming', statusKey)}</header>
       <div class="studio-card"><div class="studio-row"><span>${tr('studio.profile')}</span><strong>${escapeHtml(state.user.displayName)}</strong></div><p class="studio-muted">${tr('profile.localNotice')}</p><button class="secondary-action" type="button" data-action="edit-profile">${tr('profile.edit')}</button></div>
       ${accountContent}
+      ${authUiState.state === 'authenticated' ? renderBillingSettings() : ''}
       <aside class="studio-card product-announcement" role="note" aria-labelledby="model-switch-notice-title"><span class="eyebrow">${tr('announcement.label')}</span><h3 id="model-switch-notice-title">${tr('announcement.modelSwitchTitle')}</h3><p class="studio-muted">${tr('announcement.modelSwitchBody')}</p></aside>
       <div class="studio-card"><h3>${tr('model.runtime.title')}</h3><div class="studio-row"><span>${tr('model.status')}</span><strong>${tr(llm.configured ? 'status.configured' : 'status.notConfigured')}</strong></div><div class="studio-row"><span>${tr('model.provider')}</span><strong>${escapeHtml(formatModelProvider(llm.provider || 'deepseek'))}</strong></div><div class="studio-row"><span>${tr('model.modelName')}</span><strong>${escapeHtml(llm.model || tr('status.notConfigured'))}</strong></div></div>
     </section>`;
@@ -1818,6 +1852,8 @@ async function refreshAuthStatus({ renderSettings = true, timeoutMs = AUTH_STATU
     authUiState = reduceAuthState(authUiState, { type: 'STATUS', payload });
     const ownerId = payload.state === 'authenticated' ? payload.user?.id : '';
     storageChanged = switchLocalDataOwner(ownerId);
+    if (payload.state === 'authenticated') void refreshCommerceStatus({ renderSettings: true });
+    else billingUiState = { loading: false, configured: false, access: null, errorKey: '', checkoutPlan: '' };
   } catch (error) {
     const connectionState = error.code === 'auth_unavailable'
       ? { configured: true, state: 'signed_out' }
@@ -1833,6 +1869,54 @@ async function refreshAuthStatus({ renderSettings = true, timeoutMs = AUTH_STATU
   if (storageChanged) render();
   else if (previousAuthState !== authUiState.state) renderFirstUse();
   if (renderSettings && settingsState.surface === 'full' && settingsState.activeSection === 'account') renderFullSettings(activeCompanion());
+}
+
+async function refreshCommerceStatus({ renderSettings = true } = {}) {
+  if (authUiState.state !== 'authenticated') return;
+  billingUiState = { ...billingUiState, loading: true, errorKey: '' };
+  try {
+    const controller = new AbortController();
+    const response = await withAuthDeadline(
+      () => fetch('/api/commerce/status', { signal: controller.signal }),
+      { timeoutMs: AUTH_STATUS_TIMEOUT_MS, onTimeout: () => controller.abort() }
+    );
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error('commerce_unavailable');
+    billingUiState = {
+      loading: false,
+      configured: payload.billingConfigured === true,
+      access: payload.access || null,
+      errorKey: '',
+      checkoutPlan: ''
+    };
+  } catch {
+    billingUiState = { ...billingUiState, loading: false, errorKey: 'billing.error.status' };
+  }
+  if (renderSettings && settingsState.surface === 'full' && settingsState.activeSection === 'account') {
+    renderFullSettings(activeCompanion());
+  }
+}
+
+async function startBillingCheckout(plan) {
+  if (!BILLING_PLANS.includes(plan) || billingUiState.loading || !billingUiState.configured) return;
+  billingUiState = { ...billingUiState, loading: true, errorKey: '', checkoutPlan: plan };
+  renderFullSettings(activeCompanion());
+  try {
+    const response = await fetch('/api/billing/checkout', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ plan })
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload.checkoutUrl) throw new Error('billing_unavailable');
+    const checkoutUrl = new URL(payload.checkoutUrl);
+    const paddleHost = checkoutUrl.hostname === 'paddle.com' || checkoutUrl.hostname.endsWith('.paddle.com');
+    if (checkoutUrl.protocol !== 'https:' || !paddleHost) throw new Error('billing_unavailable');
+    window.location.assign(checkoutUrl.href);
+  } catch {
+    billingUiState = { ...billingUiState, loading: false, errorKey: 'billing.error.checkout', checkoutPlan: '' };
+    renderFullSettings(activeCompanion());
+  }
 }
 
 function scheduleColdStartAuthRecovery() {
@@ -1895,6 +1979,7 @@ async function submitAuthForm(form) {
       if (!loginStatus) throw Object.assign(new Error('auth_failed'), { code: 'auth_failed' });
       authUiState = reduceAuthState(authUiState, { type: 'STATUS', payload: loginStatus });
       if (switchLocalDataOwner(loginStatus.user.id)) render();
+      void refreshCommerceStatus({ renderSettings: true });
     }
   } catch (error) {
     authInvalidField = authInvalidFieldFor(error.code);
@@ -1910,6 +1995,7 @@ async function logoutAccount() {
   renderFullSettings(activeCompanion());
   try {
     await authRequest('/api/auth/logout', {});
+    billingUiState = { loading: false, configured: false, access: null, errorKey: '', checkoutPlan: '' };
     if (switchLocalDataOwner('')) render();
     await refreshAuthStatus({ renderSettings: false });
   } catch (error) {
@@ -2819,6 +2905,7 @@ els.fullSettings.addEventListener('click', (event) => {
   if (action === 'edit-profile') openProfileDialog();
   if (action === 'auth-logout') logoutAccount();
   if (action === 'auth-retry') retryAuthConnection();
+  if (action === 'billing-checkout') startBillingCheckout(actionButton.dataset.plan);
   if (action === 'edit-companion') openCompanionDialog('edit');
   if (action === 'delete-companion') deleteActiveCompanion();
   if (action === 'daily-pick') addDailyPick();

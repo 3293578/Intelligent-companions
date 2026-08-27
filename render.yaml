@@ -35,3 +35,13 @@ services:
         generateValue: true
       - key: DEEPSEEK_API_KEY
         sync: false
+      - key: PADDLE_ENVIRONMENT
+        value: sandbox
+      - key: PADDLE_STANDARD_PRICE_ID
+        value: pri_01kzszqc8792n88p0c90jd5r8c
+      - key: PADDLE_UNLIMITED_PRICE_ID
+        value: pri_01kzszytcn2m8wdsgbqeasyrbh
+      - key: PADDLE_API_KEY
+        sync: false
+      - key: PADDLE_WEBHOOK_SECRET
+        sync: false

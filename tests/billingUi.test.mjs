@@ -1,0 +1,46 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+
+const appJs = readFileSync(new URL('../src/app.js', import.meta.url), 'utf8');
+const i18nJs = readFileSync(new URL('../src/wythI18n.js', import.meta.url), 'utf8');
+const serverJs = readFileSync(new URL('../server.mjs', import.meta.url), 'utf8');
+
+test('account settings expose server-backed billing status and checkout actions', () => {
+  assert.match(appJs, /authUiState\.state === 'authenticated'[\s\S]*renderBillingSettings\(\)/);
+  assert.match(appJs, /fetch\('\/api\/commerce\/status'/);
+  assert.match(appJs, /fetch\('\/api\/billing\/checkout'/);
+  assert.match(appJs, /data-action="billing-checkout"/);
+  assert.match(appJs, /data-plan="standard"/);
+  assert.match(appJs, /data-plan="unlimited"/);
+});
+
+test('billing status refresh never blocks authentication completion', () => {
+  assert.match(appJs, /payload\.state === 'authenticated'\) void refreshCommerceStatus/);
+  assert.doesNotMatch(appJs, /payload\.state === 'authenticated'\) await refreshCommerceStatus/);
+});
+
+test('checkout UI only accepts server-owned plan identifiers and safe URLs', () => {
+  assert.match(appJs, /BILLING_PLANS\s*=\s*Object\.freeze\(\['standard', 'unlimited'\]\)/);
+  assert.match(appJs, /BILLING_PLANS\.includes\(plan\)/);
+  assert.match(appJs, /checkoutUrl\.protocol\s*!==\s*'https:'/);
+  assert.match(appJs, /checkoutUrl\.hostname\.endsWith\('\.paddle\.com'\)/);
+  assert.doesNotMatch(appJs, /priceId\s*:/);
+});
+
+test('commerce status reports whether hosted billing is configured', () => {
+  assert.match(serverJs, /billingConfigured:\s*billingRoutes\.configured/);
+});
+
+test('billing copy discloses trial, recurring prices, and fair use', () => {
+  for (const key of [
+    'billing.title',
+    'billing.trial',
+    'billing.standard.title',
+    'billing.unlimited.title',
+    'billing.unlimited.fairUse',
+    'billing.notConfigured'
+  ]) {
+    assert.match(i18nJs, new RegExp(`\\['${key}'`));
+  }
+});

@@ -31,6 +31,8 @@ import { createSecurityHeaders, staticCacheControl } from './src/httpSecurity.js
 import { safeRequestFailure } from './src/requestBoundary.js';
 import { createSupabaseCommerceClient } from './src/supabaseCommerceClient.js';
 import { createCommerceRuntime } from './src/commerceRuntime.js';
+import { createPaddleBillingClient } from './src/paddleBilling.js';
+import { createBillingRouteHandler } from './src/billingRoutes.js';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 try {
@@ -84,6 +86,26 @@ const commerceRuntime = createCommerceRuntime({
     cachedInputPerMillionUsd: process.env.DEEPSEEK_CACHED_INPUT_PER_MILLION_USD,
     outputPerMillionUsd: process.env.DEEPSEEK_OUTPUT_PER_MILLION_USD
   }
+});
+const paddleApiKey = String(process.env.PADDLE_API_KEY || '').trim();
+const paddleWebhookSecret = String(process.env.PADDLE_WEBHOOK_SECRET || '').trim();
+const paddlePriceIds = {
+  standard: String(process.env.PADDLE_STANDARD_PRICE_ID || '').trim(),
+  unlimited: String(process.env.PADDLE_UNLIMITED_PRICE_ID || '').trim()
+};
+const paddleBillingClient = paddleApiKey && paddleWebhookSecret && paddlePriceIds.standard && paddlePriceIds.unlimited
+  ? createPaddleBillingClient({
+      apiKey: paddleApiKey,
+      environment: process.env.PADDLE_ENVIRONMENT || 'sandbox',
+      checkoutUrl: `${appOrigin}/?billing=return`,
+      priceIds: paddlePriceIds,
+      fetchImpl: outboundFetch
+    })
+  : null;
+const billingRoutes = createBillingRouteHandler({
+  billingClient: paddleBillingClient,
+  commerceClient,
+  webhookSecret: paddleWebhookSecret
 });
 if (authConfigured && process.env.NODE_ENV === 'production' && !process.env.AUTH_RECOVERY_SECRET) {
   throw new Error('AUTH_RECOVERY_SECRET is required in production.');
@@ -385,6 +407,28 @@ async function handleRequest(request, response) {
       return;
     }
   }
+  if (requestUrl.pathname === '/api/billing/paddle/webhook') {
+    if (request.method !== 'POST') {
+      sendJson(response, { error: 'method_not_allowed' }, 405);
+      return;
+    }
+    const result = await billingRoutes.webhook({
+      rawBody: await readBody(request),
+      signatureHeader: request.headers['paddle-signature']
+    });
+    sendJson(response, result.body, result.status);
+    return;
+  }
+  if (requestUrl.pathname === '/api/billing/checkout') {
+    if (request.method !== 'POST') {
+      sendJson(response, { error: 'method_not_allowed' }, 405);
+      return;
+    }
+    const body = await (await proxyRequestFromNode(request)).json();
+    const result = await billingRoutes.checkout({ authenticatedUser, body });
+    sendJson(response, result.body, result.status);
+    return;
+  }
   if (request.url === '/api/health' && request.method === 'GET') {
     sendJson(response, createHealthPayload({ startedAt: runtimeStatus.startedAt, port, processId: process.pid }));
     return;
@@ -419,7 +463,8 @@ async function handleRequest(request, response) {
       },
       commerce: {
         configured: Boolean(commerceClient),
-        required: commerceRequired
+        required: commerceRequired,
+        billingConfigured: billingRoutes.configured
       }
     });
     return;
@@ -465,7 +510,12 @@ async function handleRequest(request, response) {
   if (requestUrl.pathname === '/api/commerce/status' && request.method === 'GET') {
     try {
       const access = await commerceRuntime.checkAccess(authenticatedUser.id);
-      sendJson(response, { configured: Boolean(commerceClient), required: commerceRequired, access });
+      sendJson(response, {
+        configured: Boolean(commerceClient),
+        billingConfigured: billingRoutes.configured,
+        required: commerceRequired,
+        access
+      });
     } catch {
       sendJson(response, { error: 'commerce_unavailable', retryable: true }, 503);
     }

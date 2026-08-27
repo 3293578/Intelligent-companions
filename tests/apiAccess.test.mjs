@@ -4,10 +4,10 @@ import assert from 'node:assert/strict';
 import { isPublicApiPath, scopedMemoryId } from '../src/apiAccess.js';
 
 test('only liveness, readiness, and auth lifecycle APIs stay public', () => {
-  for (const path of ['/api/health', '/api/health/ready', '/api/auth/status', '/api/auth/confirm']) {
+  for (const path of ['/api/health', '/api/health/ready', '/api/auth/status', '/api/auth/confirm', '/api/billing/paddle/webhook']) {
     assert.equal(isPublicApiPath(path), true, path);
   }
-  for (const path of ['/api/chat', '/api/model', '/api/memory/c1', '/api/translate', '/api/language-assist', '/api/content', '/api/status']) {
+  for (const path of ['/api/chat', '/api/model', '/api/memory/c1', '/api/translate', '/api/language-assist', '/api/content', '/api/status', '/api/billing/checkout']) {
     assert.equal(isPublicApiPath(path), false, path);
   }
 });

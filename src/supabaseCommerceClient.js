@@ -2,6 +2,11 @@ import { resolveCommercialAccess } from './entitlements.js';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const OPERATIONS = new Set(['chat', 'translate', 'language_assist', 'content']);
+const PADDLE_EVENT_PATTERN = /^evt_[a-z0-9]{26}$/;
+const PADDLE_SUBSCRIPTION_PATTERN = /^sub_[a-z0-9]{26}$/;
+const PADDLE_CUSTOMER_PATTERN = /^ctm_[a-z0-9]{26}$/;
+const PLANS = new Set(['standard', 'unlimited']);
+const SUBSCRIPTION_STATUSES = new Set(['trialing', 'active', 'past_due', 'paused', 'canceled']);
 
 function commerceError(code, status = 503) {
   const error = new Error(code);
@@ -164,5 +169,34 @@ export function createSupabaseCommerceClient(options = {}) {
     });
   }
 
-  return { getAccess, recordSuccessfulUse };
+  async function applyPaddleSubscriptionEvent(input = {}) {
+    const providerEventId = String(input.providerEventId || '');
+    const providerSubscriptionId = String(input.providerSubscriptionId || '');
+    const providerCustomerId = input.providerCustomerId === null ? null : String(input.providerCustomerId || '');
+    const plan = String(input.plan || '');
+    const status = String(input.status || '');
+    if (!PADDLE_EVENT_PATTERN.test(providerEventId)) throw commerceError('invalid_paddle_event', 400);
+    if (!PADDLE_SUBSCRIPTION_PATTERN.test(providerSubscriptionId)) throw commerceError('invalid_paddle_subscription', 400);
+    if (providerCustomerId !== null && !PADDLE_CUSTOMER_PATTERN.test(providerCustomerId)) throw commerceError('invalid_paddle_customer', 400);
+    if (!PLANS.has(plan) || !SUBSCRIPTION_STATUSES.has(status)) throw commerceError('invalid_paddle_subscription', 400);
+    const applied = await request('/rpc/apply_paddle_subscription_event', {
+      method: 'POST',
+      body: {
+        p_provider_event_id: providerEventId,
+        p_event_type: String(input.eventType || '').slice(0, 120),
+        p_occurred_at: isoInstant(input.occurredAt),
+        p_user_id: uuid(input.userId, 'invalid_user_id'),
+        p_provider_customer_id: providerCustomerId,
+        p_provider_subscription_id: providerSubscriptionId,
+        p_plan: plan,
+        p_status: status,
+        p_current_period_start: input.currentPeriodStart ? isoInstant(input.currentPeriodStart) : null,
+        p_current_period_end: input.currentPeriodEnd ? isoInstant(input.currentPeriodEnd) : null,
+        p_cancel_at_period_end: Boolean(input.cancelAtPeriodEnd)
+      }
+    });
+    return applied === true;
+  }
+
+  return { getAccess, recordSuccessfulUse, applyPaddleSubscriptionEvent };
 }

@@ -105,3 +105,34 @@ test('commerce client rejects invalid identities and sanitizes provider failures
     (error) => error.code === 'commerce_unavailable' && !error.message.includes('leaked')
   );
 });
+
+test('commerce client applies normalized Paddle events through one server-only RPC', async () => {
+  const calls = [];
+  const client = createSupabaseCommerceClient({
+    supabaseUrl: 'https://project.supabase.co',
+    secretKey: TEST_SECRET,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      return jsonResponse(true);
+    }
+  });
+  const applied = await client.applyPaddleSubscriptionEvent({
+    providerEventId: 'evt_01h00000000000000000000000',
+    eventType: 'subscription.updated',
+    occurredAt: NOW,
+    userId: USER_ID,
+    providerCustomerId: 'ctm_01h00000000000000000000000',
+    providerSubscriptionId: 'sub_01h00000000000000000000000',
+    plan: 'standard',
+    status: 'active',
+    currentPeriodStart: NOW,
+    currentPeriodEnd: '2026-09-25T10:00:00.000Z',
+    cancelAtPeriodEnd: false
+  });
+  assert.equal(applied, true);
+  assert.match(calls[0].url, /\/rpc\/apply_paddle_subscription_event$/);
+  const body = JSON.parse(calls[0].options.body);
+  assert.equal(body.p_user_id, USER_ID);
+  assert.equal(body.p_plan, 'standard');
+  assert.equal(body.p_provider_subscription_id, 'sub_01h00000000000000000000000');
+});
