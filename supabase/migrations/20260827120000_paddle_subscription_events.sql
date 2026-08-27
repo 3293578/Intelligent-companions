@@ -73,7 +73,7 @@ begin
       current_period_end = excluded.current_period_end,
       cancel_at_period_end = excluded.cancel_at_period_end,
       last_provider_event_at = excluded.last_provider_event_at,
-      updated_at = now();
+      updated_at = now()
   where excluded.last_provider_event_at >= public.subscriptions.last_provider_event_at;
 
   update public.webhook_events

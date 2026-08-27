@@ -22,6 +22,7 @@ test('Paddle subscription webhook updates are atomic, idempotent, and server-onl
   assert.match(paddleFunctions, /on conflict \(provider, provider_subscription_id\) do update/i);
   assert.match(paddleFunctions, /last_provider_event_at timestamptz/i);
   assert.match(paddleFunctions, /where excluded\.last_provider_event_at >= public\.subscriptions\.last_provider_event_at/i);
+  assert.doesNotMatch(paddleFunctions, /updated_at = now\(\);\s*where excluded/i);
   assert.match(paddleFunctions, /grant execute on function public\.apply_paddle_subscription_event[\s\S]*to service_role/i);
   assert.match(paddleFunctions, /revoke all on function public\.apply_paddle_subscription_event[\s\S]*from public, anon, authenticated/i);
   assert.doesNotMatch(paddleFunctions, /chat|prompt|message_content/i);
