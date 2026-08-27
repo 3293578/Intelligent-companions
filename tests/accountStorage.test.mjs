@@ -1,7 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { accountStorageKey, migrateGuestStorage } from '../src/accountStorage.js';
+import {
+  accountStorageKey,
+  clearRememberedLocalOwner,
+  migrateGuestStorage,
+  readRememberedLocalOwner,
+  rememberLocalOwner
+} from '../src/accountStorage.js';
 
 function memoryStorage(initial = {}) {
   const values = new Map(Object.entries(initial));
@@ -46,4 +52,31 @@ test('A logout and B login cannot resolve A account data through shared keys', (
   assert.equal(storage.getItem(accountStorageKey('state', '')), null);
   assert.equal(storage.getItem(accountStorageKey('state', 'user-a')), 'a-legacy-chat');
   assert.equal(storage.getItem(accountStorageKey('state', 'user-b')), null);
+});
+
+test('the last authenticated owner can restore only its local namespace during a cold start', () => {
+  const storage = memoryStorage();
+  assert.equal(readRememberedLocalOwner(storage), '');
+
+  assert.equal(rememberLocalOwner(storage, 'user-a'), true);
+  assert.equal(readRememberedLocalOwner(storage), 'user-a');
+  assert.equal(accountStorageKey('state', readRememberedLocalOwner(storage)), 'state:account:user-a');
+
+  assert.equal(clearRememberedLocalOwner(storage), true);
+  assert.equal(readRememberedLocalOwner(storage), '');
+});
+
+test('remembered local owners reject malformed identifiers and tolerate unavailable storage', () => {
+  const storage = memoryStorage();
+  assert.equal(rememberLocalOwner(storage, '../bad'), false);
+  assert.equal(readRememberedLocalOwner(storage), '');
+
+  const unavailable = {
+    getItem() { throw new Error('blocked'); },
+    setItem() { throw new Error('blocked'); },
+    removeItem() { throw new Error('blocked'); }
+  };
+  assert.equal(readRememberedLocalOwner(unavailable), '');
+  assert.equal(rememberLocalOwner(unavailable, 'user-a'), false);
+  assert.equal(clearRememberedLocalOwner(unavailable), false);
 });

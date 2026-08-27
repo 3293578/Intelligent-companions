@@ -506,14 +506,20 @@ test('first-use storage failures are announced and locale focus is restored', ()
   assert.doesNotMatch(appJs, /requestAnimationFrame\(\(\) => document\.querySelector\(`\[data-locale/);
 });
 
-test('startup authentication refreshes an account surface opened while status is loading', () => {
+test('startup keeps local UI interactive while authentication refreshes in the background', () => {
+  assert.match(appJs, /render\(\);\s*refreshRuntimeStatus\(\);\s*void \(async \(\) => \{/);
   assert.match(appJs, /const initialAuthCallback = await handleAuthCallback\(\);\s*await refreshAuthStatus\(\{ renderSettings: true \}\);/);
+  assert.match(appJs, /readRememberedLocalOwner\(localStorage\)/);
+  assert.match(appJs, /rememberLocalOwner\(localStorage, nextOwner\)/);
+  assert.match(appJs, /clearRememberedLocalOwner\(localStorage\)/);
 });
 
 test('account status checks use a short timeout while interactive auth keeps its cold-start allowance', () => {
   assert.match(appJs, /const AUTH_REQUEST_TIMEOUT_MS\s*=\s*65_000/);
   assert.match(appJs, /const AUTH_STATUS_TIMEOUT_MS\s*=\s*9_000/);
   assert.match(appJs, /async function authRequest\(path, body, \{ timeoutMs = AUTH_REQUEST_TIMEOUT_MS \} = \{\}\)/);
-  assert.match(appJs, /authRequest\('\/api\/auth\/status', undefined, \{ timeoutMs: AUTH_STATUS_TIMEOUT_MS \}\)/);
+  assert.match(appJs, /async function refreshAuthStatus\(\{ renderSettings = true, timeoutMs = AUTH_STATUS_TIMEOUT_MS \} = \{\}\)/);
+  assert.match(appJs, /authRequest\('\/api\/auth\/status', undefined, \{ timeoutMs \}\)/);
+  assert.match(appJs, /scheduleColdStartAuthRecovery[\s\S]*timeoutMs: AUTH_REQUEST_TIMEOUT_MS/);
   assert.match(appJs, /withAuthDeadline\([\s\S]*onTimeout:\s*\(\)\s*=>\s*controller\.abort\(\)/);
 });

@@ -105,7 +105,13 @@ import {
 import { formatChatTimestamp } from './chatTime.js';
 import { authErrorKey, authenticatedStatusFromLogin, createAuthUiState, parseAuthCallback, reduceAuthState } from './authBrowser.js';
 import { withAuthDeadline } from './authDeadline.js';
-import { accountStorageKey, migrateGuestStorage } from './accountStorage.js';
+import {
+  accountStorageKey,
+  clearRememberedLocalOwner,
+  migrateGuestStorage,
+  readRememberedLocalOwner,
+  rememberLocalOwner
+} from './accountStorage.js';
 
 const STORAGE_KEY = 'english-companions-state-v1';
 const MOTION_KEY = 'wyth-reduce-motion';
@@ -123,7 +129,7 @@ const ACCOUNT_STORAGE_KEYS = Object.freeze([
   `${STORAGE_KEY}-saved-picks`,
   `${STORAGE_KEY}-vocab-book`
 ]);
-let storageOwnerId = '';
+let storageOwnerId = readRememberedLocalOwner(localStorage);
 
 function ownedStorageKey(baseKey) {
   return accountStorageKey(baseKey, storageOwnerId);
@@ -452,6 +458,8 @@ function switchLocalDataOwner(nextUserId = '') {
   const nextOwner = String(nextUserId || '');
   if (nextOwner === storageOwnerId) return false;
   if (nextOwner && !storageOwnerId) migrateGuestStorage(localStorage, ACCOUNT_STORAGE_KEYS, nextOwner);
+  if (nextOwner) rememberLocalOwner(localStorage, nextOwner);
+  else clearRememberedLocalOwner(localStorage);
   storageOwnerId = nextOwner;
   state = loadState();
   onboarding = loadOnboardingState();
@@ -1801,11 +1809,11 @@ async function authRequest(path, body, { timeoutMs = AUTH_REQUEST_TIMEOUT_MS } =
   return payload;
 }
 
-async function refreshAuthStatus({ renderSettings = true } = {}) {
+async function refreshAuthStatus({ renderSettings = true, timeoutMs = AUTH_STATUS_TIMEOUT_MS } = {}) {
   let storageChanged = false;
   const previousAuthState = authUiState.state;
   try {
-    const payload = await authRequest('/api/auth/status', undefined, { timeoutMs: AUTH_STATUS_TIMEOUT_MS });
+    const payload = await authRequest('/api/auth/status', undefined, { timeoutMs });
     authUiState = reduceAuthState(authUiState, { type: 'STATUS', payload });
     const ownerId = payload.state === 'authenticated' ? payload.user?.id : '';
     storageChanged = switchLocalDataOwner(ownerId);
@@ -1824,6 +1832,13 @@ async function refreshAuthStatus({ renderSettings = true } = {}) {
   if (storageChanged) render();
   else if (previousAuthState !== authUiState.state) renderFirstUse();
   if (renderSettings && settingsState.surface === 'full' && settingsState.activeSection === 'account') renderFullSettings(activeCompanion());
+}
+
+function scheduleColdStartAuthRecovery() {
+  window.setTimeout(() => {
+    if (authUiState.errorKey !== 'auth.error.unavailable') return;
+    refreshAuthStatus({ renderSettings: true, timeoutMs: AUTH_REQUEST_TIMEOUT_MS });
+  }, 1_500);
 }
 
 async function handleAuthCallback() {
@@ -3061,16 +3076,19 @@ if (activeCompanion()) {
   saveReadReceipts();
 }
 render();
-const initialAuthCallback = await handleAuthCallback();
-await refreshAuthStatus({ renderSettings: true });
-if (initialAuthCallback === 'none'
-  && state.companions.length === 0
-  && onboarding.experience === 'returning'
-  && authUiState.state !== 'authenticated') {
-  authUiState = reduceAuthState(authUiState, { type: 'MODE', mode: 'login' });
-  openFullSettingsSurface('account', { focus: 'auth' });
-}
 refreshRuntimeStatus();
+void (async () => {
+  const initialAuthCallback = await handleAuthCallback();
+  await refreshAuthStatus({ renderSettings: true });
+  if (authUiState.errorKey === 'auth.error.unavailable') scheduleColdStartAuthRecovery();
+  if (initialAuthCallback === 'none'
+    && state.companions.length === 0
+    && onboarding.experience === 'returning'
+    && authUiState.state !== 'authenticated') {
+    authUiState = reduceAuthState(authUiState, { type: 'MODE', mode: 'login' });
+    openFullSettingsSurface('account', { focus: 'auth' });
+  }
+})();
 if (activeCompanion()) refreshMemoryStatus(activeCompanion().id);
 runLocalScheduler();
 setInterval(() => runLocalScheduler(), 60 * 1000);
