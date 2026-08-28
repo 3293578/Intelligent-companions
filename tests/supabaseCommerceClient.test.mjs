@@ -106,6 +106,26 @@ test('commerce client rejects invalid identities and sanitizes provider failures
   );
 });
 
+test('commerce client recovers from one transient read authorization failure', async () => {
+  const attempts = new Map();
+  const client = createSupabaseCommerceClient({
+    supabaseUrl: 'https://project.supabase.co',
+    secretKey: TEST_SECRET,
+    fetchImpl: async (url) => {
+      const count = (attempts.get(url) || 0) + 1;
+      attempts.set(url, count);
+      if (url.includes('kind=eq.trial') && count === 1) return jsonResponse({ message: 'transient gateway authorization failure' }, 401);
+      if (url.includes('/subscriptions?') || url.includes('/entitlement_periods?')) return jsonResponse([]);
+      throw new Error(`unexpected request: ${url}`);
+    }
+  });
+
+  const access = await client.getAccess({ userId: USER_ID, now: NOW });
+  assert.equal(access.allowed, true);
+  assert.equal(access.plan, 'trial_pending');
+  assert.equal([...attempts.values()].reduce((total, count) => total + count, 0), 4);
+});
+
 test('commerce client applies normalized Paddle events through one server-only RPC', async () => {
   const calls = [];
   const client = createSupabaseCommerceClient({

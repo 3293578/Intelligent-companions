@@ -54,21 +54,29 @@ export function createSupabaseCommerceClient(options = {}) {
   }
 
   async function request(path, requestOptions = {}) {
-    let response;
-    try {
-      response = await fetchImpl(`${origin}/rest/v1${path}`, {
-        method: requestOptions.method || 'GET',
-        headers: {
-          apikey: secretKey,
-          accept: 'application/json',
-          ...(requestOptions.body === undefined ? {} : { 'content-type': 'application/json' }),
-          ...(requestOptions.prefer ? { prefer: requestOptions.prefer } : {})
-        },
-        ...(requestOptions.body === undefined ? {} : { body: JSON.stringify(requestOptions.body) }),
-        signal: AbortSignal.timeout(timeoutMs)
-      });
-    } catch {
-      throw commerceError('commerce_unavailable');
+    const method = requestOptions.method || 'GET';
+    const maxAttempts = method === 'GET' ? 2 : 1;
+    let response = null;
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      try {
+        response = await fetchImpl(`${origin}/rest/v1${path}`, {
+          method,
+          headers: {
+            apikey: secretKey,
+            accept: 'application/json',
+            ...(requestOptions.body === undefined ? {} : { 'content-type': 'application/json' }),
+            ...(requestOptions.prefer ? { prefer: requestOptions.prefer } : {})
+          },
+          ...(requestOptions.body === undefined ? {} : { body: JSON.stringify(requestOptions.body) }),
+          signal: AbortSignal.timeout(timeoutMs)
+        });
+      } catch {
+        if (attempt === maxAttempts) throw commerceError('commerce_unavailable');
+        continue;
+      }
+      const retryableReadFailure = response.status === 401 || response.status === 429 || response.status >= 500;
+      if (!response.ok && retryableReadFailure && attempt < maxAttempts) continue;
+      break;
     }
     if (!response?.ok) throw commerceError('commerce_unavailable');
     if (response.status === 204) return null;
