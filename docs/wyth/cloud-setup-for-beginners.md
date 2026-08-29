@@ -60,6 +60,14 @@
 6. 依次验证 `/api/health`、`/api/health/ready`、邮箱注册确认、登录、一次真实 DeepSeek 对话和退出登录。任何一步失败都先保留日志，不开放公开注册。
 7. staging 通过后再建立独立 production 服务；不得复用 staging 的 Supabase 项目、密钥或 Paddle 沙盒产品。
 
+### Production Blueprint（仅在 staging 全部通过后）
+
+1. 新建独立 Render Blueprint，并将 Blueprint Path 指向 `render.production.yaml`；不要修改现有 `wyth-staging`。
+2. 该文件创建 `wyth-production`，使用不会因空闲休眠的 Starter 实例，并关闭自动部署。正式发布必须先通过测试，再由人工触发部署。
+3. production 必须使用独立 Supabase 项目、Paddle live API key/client token/webhook secret/live price IDs 和 DeepSeek 密钥。任何 sandbox ID 都不能复制到 production。
+4. 首次创建时先不要开放注册。完成 `thewyth.com` / `www.thewyth.com` DNS、Supabase 回调、Paddle live 域名审批、邮件域名和政策页后，再执行生产冒烟测试。
+5. `COMMERCE_REQUIRED=1` 会让服务在生产支付配置缺失、令牌环境不匹配或价格 ID 无效时拒绝启动，避免免费放行或混用沙盒账单。
+
 银行卡验证尚未完成时可以继续本地测试和文档准备，但不能完成 Render 上的真实部署、Paddle webhook、正式回调 URL 或 Cloudflare 自定义域名验证。
 
 ## 6. 费用和告警最低配置

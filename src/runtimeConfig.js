@@ -1,4 +1,6 @@
 const PLACEHOLDER_PATTERN = /(?:replace[_-]?me|replace[_-]?with|change[_-]?me|your[_-]|example)/i;
+const PADDLE_PRICE_PATTERN = /^pri_[a-z0-9]{26}$/;
+const PADDLE_CLIENT_TOKEN_PATTERN = /^(test|live)_[a-zA-Z0-9]{27}$/;
 
 function hasRealValue(value, minimumLength = 1) {
   const text = String(value || '').trim();
@@ -38,6 +40,28 @@ export function assertProductionEnvironment(env = {}) {
   if (!hasRealValue(env.DEEPSEEK_API_KEY || env.LLM_API_KEY, 16)) invalid.push('DEEPSEEK_API_KEY');
   if (env.COMMERCE_REQUIRED === '1' && !String(env.SUPABASE_SECRET_KEY || '').startsWith('sb_secret_')) {
     invalid.push('SUPABASE_SECRET_KEY');
+  }
+  if (env.COMMERCE_REQUIRED === '1') {
+    const paddleEnvironment = String(env.PADDLE_ENVIRONMENT || '').trim().toLowerCase();
+    const clientToken = String(env.PADDLE_CLIENT_TOKEN || '').trim();
+    const expectedTokenPrefix = paddleEnvironment === 'sandbox'
+      ? 'test_'
+      : paddleEnvironment === 'production'
+        ? 'live_'
+        : '';
+    if (!expectedTokenPrefix) invalid.push('PADDLE_ENVIRONMENT');
+    if (!hasRealValue(env.PADDLE_API_KEY, 24)) invalid.push('PADDLE_API_KEY');
+    if (
+      !PADDLE_CLIENT_TOKEN_PATTERN.test(clientToken)
+      || !clientToken.startsWith(expectedTokenPrefix)
+    ) invalid.push('PADDLE_CLIENT_TOKEN');
+    if (!hasRealValue(env.PADDLE_WEBHOOK_SECRET, 12)) invalid.push('PADDLE_WEBHOOK_SECRET');
+    if (!PADDLE_PRICE_PATTERN.test(String(env.PADDLE_STANDARD_PRICE_ID || '').trim())) {
+      invalid.push('PADDLE_STANDARD_PRICE_ID');
+    }
+    if (!PADDLE_PRICE_PATTERN.test(String(env.PADDLE_UNLIMITED_PRICE_ID || '').trim())) {
+      invalid.push('PADDLE_UNLIMITED_PRICE_ID');
+    }
   }
   if (invalid.length) throw new Error(`Invalid production environment: ${invalid.join(', ')}`);
 }

@@ -30,6 +30,31 @@ test('Render staging blueprint uses the Node service, liveness health, and dashb
   assert.doesNotMatch(blueprint, /sb_publishable_[a-z0-9_-]{20,}|sk-[a-z0-9_-]{20,}|@qq\.com/i);
 });
 
+test('Render production blueprint is isolated, paid, review-gated, and live-commerce only', () => {
+  const blueprint = fs.readFileSync(path.join(root, 'render.production.yaml'), 'utf8');
+  assert.match(blueprint, /name:\s*wyth-production/);
+  assert.match(blueprint, /plan:\s*starter/);
+  assert.match(blueprint, /healthCheckPath:\s*\/api\/health/);
+  assert.match(blueprint, /autoDeployTrigger:\s*off/);
+  assert.match(blueprint, /key:\s*APP_ORIGIN[\s\S]{0,80}value:\s*https:\/\/thewyth\.com/);
+  assert.match(blueprint, /key:\s*COMMERCE_REQUIRED[\s\S]{0,80}value:\s*['"]?1/);
+  assert.match(blueprint, /key:\s*PADDLE_ENVIRONMENT[\s\S]{0,80}value:\s*production/);
+  for (const key of [
+    'SUPABASE_URL',
+    'SUPABASE_PUBLISHABLE_KEY',
+    'SUPABASE_SECRET_KEY',
+    'DEEPSEEK_API_KEY',
+    'PADDLE_API_KEY',
+    'PADDLE_CLIENT_TOKEN',
+    'PADDLE_WEBHOOK_SECRET',
+    'PADDLE_STANDARD_PRICE_ID',
+    'PADDLE_UNLIMITED_PRICE_ID'
+  ]) {
+    assert.match(blueprint, new RegExp(`key:\\s*${key}[\\s\\S]{0,80}sync:\\s*false`));
+  }
+  assert.doesNotMatch(blueprint, /pri_01kz|PADDLE_ENVIRONMENT[\s\S]{0,80}sandbox/);
+});
+
 test('package exposes a production start command and a bounded supported Node range', () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
   assert.equal(pkg.scripts.start, 'node server.mjs');

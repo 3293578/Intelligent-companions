@@ -12,6 +12,17 @@ const validProduction = {
   DEEPSEEK_API_KEY: 'a-server-only-deepseek-key'
 };
 
+const validCommerce = {
+  COMMERCE_REQUIRED: '1',
+  SUPABASE_SECRET_KEY: ['sb', 'secret', 'server-only-test-value'].join('_'),
+  PADDLE_ENVIRONMENT: 'production',
+  PADDLE_API_KEY: 'paddle-server-only-api-key-value',
+  PADDLE_CLIENT_TOKEN: `live_${'a'.repeat(27)}`,
+  PADDLE_WEBHOOK_SECRET: 'paddle-webhook-secret',
+  PADDLE_STANDARD_PRICE_ID: `pri_${'a'.repeat(26)}`,
+  PADDLE_UNLIMITED_PRICE_ID: `pri_${'b'.repeat(26)}`
+};
+
 test('production listens on the managed host while local development stays loopback-only', () => {
   assert.equal(resolveServerHost({ NODE_ENV: 'production' }), '0.0.0.0');
   assert.equal(resolveServerHost({ NODE_ENV: 'development' }), '127.0.0.1');
@@ -45,7 +56,28 @@ test('production requires a server-only Supabase secret when commerce enforcemen
   );
   assert.doesNotThrow(() => assertProductionEnvironment({
     ...validProduction,
-    COMMERCE_REQUIRED: '1',
-    SUPABASE_SECRET_KEY: ['sb', 'secret', 'server-only-test-value'].join('_')
+    ...validCommerce
+  }));
+});
+
+test('commercial production refuses incomplete or mixed Paddle environments', () => {
+  for (const patch of [
+    { PADDLE_API_KEY: '' },
+    { PADDLE_CLIENT_TOKEN: `test_${'a'.repeat(27)}` },
+    { PADDLE_WEBHOOK_SECRET: '' },
+    { PADDLE_STANDARD_PRICE_ID: `pri_${'a'.repeat(25)}` },
+    { PADDLE_UNLIMITED_PRICE_ID: 'replace_me' }
+  ]) {
+    assert.throws(
+      () => assertProductionEnvironment({ ...validProduction, ...validCommerce, ...patch }),
+      /Invalid production environment:/
+    );
+  }
+
+  assert.doesNotThrow(() => assertProductionEnvironment({
+    ...validProduction,
+    ...validCommerce,
+    PADDLE_ENVIRONMENT: 'sandbox',
+    PADDLE_CLIENT_TOKEN: `test_${'a'.repeat(27)}`
   }));
 });
