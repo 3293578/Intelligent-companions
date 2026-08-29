@@ -33,6 +33,7 @@ import { createSupabaseCommerceClient } from './src/supabaseCommerceClient.js';
 import { createCommerceRuntime } from './src/commerceRuntime.js';
 import { createPaddleBillingClient } from './src/paddleBilling.js';
 import { createBillingRouteHandler } from './src/billingRoutes.js';
+import { publicPaddleClientConfig } from './src/paddleCheckout.js';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 try {
@@ -89,6 +90,11 @@ const commerceRuntime = createCommerceRuntime({
 });
 const paddleApiKey = String(process.env.PADDLE_API_KEY || '').trim();
 const paddleWebhookSecret = String(process.env.PADDLE_WEBHOOK_SECRET || '').trim();
+const paddleEnvironment = String(process.env.PADDLE_ENVIRONMENT || 'sandbox').trim().toLowerCase();
+const paddleClientConfig = publicPaddleClientConfig({
+  environment: paddleEnvironment,
+  token: process.env.PADDLE_CLIENT_TOKEN
+});
 const paddlePriceIds = {
   standard: String(process.env.PADDLE_STANDARD_PRICE_ID || '').trim(),
   unlimited: String(process.env.PADDLE_UNLIMITED_PRICE_ID || '').trim()
@@ -96,7 +102,7 @@ const paddlePriceIds = {
 const paddleBillingClient = paddleApiKey && paddleWebhookSecret && paddlePriceIds.standard && paddlePriceIds.unlimited
   ? createPaddleBillingClient({
       apiKey: paddleApiKey,
-      environment: process.env.PADDLE_ENVIRONMENT || 'sandbox',
+      environment: paddleEnvironment,
       checkoutUrl: `${appOrigin}/?billing=return`,
       priceIds: paddlePriceIds,
       fetchImpl: outboundFetch
@@ -105,8 +111,12 @@ const paddleBillingClient = paddleApiKey && paddleWebhookSecret && paddlePriceId
 const billingRoutes = createBillingRouteHandler({
   billingClient: paddleBillingClient,
   commerceClient,
-  webhookSecret: paddleWebhookSecret
+  webhookSecret: paddleWebhookSecret,
+  onDiagnostic(diagnostic) {
+    console.warn(JSON.stringify({ event: 'billing_failure', ...diagnostic }));
+  }
 });
+const hostedBillingConfigured = billingRoutes.configured && Boolean(paddleClientConfig);
 if (authConfigured && process.env.NODE_ENV === 'production' && !process.env.AUTH_RECOVERY_SECRET) {
   throw new Error('AUTH_RECOVERY_SECRET is required in production.');
 }
@@ -464,7 +474,7 @@ async function handleRequest(request, response) {
       commerce: {
         configured: Boolean(commerceClient),
         required: commerceRequired,
-        billingConfigured: billingRoutes.configured
+        billingConfigured: hostedBillingConfigured
       }
     });
     return;
@@ -512,7 +522,8 @@ async function handleRequest(request, response) {
       const access = await commerceRuntime.checkAccess(authenticatedUser.id);
       sendJson(response, {
         configured: Boolean(commerceClient),
-        billingConfigured: billingRoutes.configured,
+        billingConfigured: hostedBillingConfigured,
+        paddle: paddleClientConfig,
         required: commerceRequired,
         access
       });

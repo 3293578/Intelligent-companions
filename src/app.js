@@ -112,6 +112,7 @@ import {
   readRememberedLocalOwner,
   rememberLocalOwner
 } from './accountStorage.js';
+import { createPaddleCheckoutLauncher } from './paddleCheckout.js';
 
 const STORAGE_KEY = 'english-companions-state-v1';
 const MOTION_KEY = 'wyth-reduce-motion';
@@ -121,6 +122,7 @@ const NOTIFICATIONS_KEY = 'wyth-notifications-v1';
 const AUTH_REQUEST_TIMEOUT_MS = 65_000;
 const AUTH_STATUS_TIMEOUT_MS = 9_000;
 const BILLING_PLANS = Object.freeze(['standard', 'unlimited']);
+const paddleCheckout = createPaddleCheckoutLauncher();
 const ACCOUNT_STORAGE_KEYS = Object.freeze([
   STORAGE_KEY,
   ONBOARDING_KEY,
@@ -239,6 +241,7 @@ let authInvalidField = '';
 let billingUiState = {
   loading: false,
   configured: false,
+  paddle: null,
   access: null,
   errorKey: '',
   checkoutPlan: ''
@@ -1853,7 +1856,7 @@ async function refreshAuthStatus({ renderSettings = true, timeoutMs = AUTH_STATU
     const ownerId = payload.state === 'authenticated' ? payload.user?.id : '';
     storageChanged = switchLocalDataOwner(ownerId);
     if (payload.state === 'authenticated') void refreshCommerceStatus({ renderSettings: true });
-    else billingUiState = { loading: false, configured: false, access: null, errorKey: '', checkoutPlan: '' };
+    else billingUiState = { loading: false, configured: false, paddle: null, access: null, errorKey: '', checkoutPlan: '' };
   } catch (error) {
     const connectionState = error.code === 'auth_unavailable'
       ? { configured: true, state: 'signed_out' }
@@ -1885,6 +1888,7 @@ async function refreshCommerceStatus({ renderSettings = true } = {}) {
     billingUiState = {
       loading: false,
       configured: payload.billingConfigured === true,
+      paddle: payload.paddle || null,
       access: payload.access || null,
       errorKey: '',
       checkoutPlan: ''
@@ -1908,11 +1912,14 @@ async function startBillingCheckout(plan) {
       body: JSON.stringify({ plan })
     });
     const payload = await response.json().catch(() => ({}));
-    if (!response.ok || !payload.checkoutUrl) throw new Error('billing_unavailable');
-    const checkoutUrl = new URL(payload.checkoutUrl);
-    const paddleHost = checkoutUrl.hostname === 'paddle.com' || checkoutUrl.hostname.endsWith('.paddle.com');
-    if (checkoutUrl.protocol !== 'https:' || !paddleHost) throw new Error('billing_unavailable');
-    window.location.assign(checkoutUrl.href);
+    if (!response.ok || !payload.transactionId) throw new Error('billing_unavailable');
+    await paddleCheckout.open({
+      transactionId: payload.transactionId,
+      config: billingUiState.paddle,
+      locale: onboarding.interfaceLocale
+    });
+    billingUiState = { ...billingUiState, loading: false, errorKey: '', checkoutPlan: '' };
+    renderFullSettings(activeCompanion());
   } catch {
     billingUiState = { ...billingUiState, loading: false, errorKey: 'billing.error.checkout', checkoutPlan: '' };
     renderFullSettings(activeCompanion());
@@ -1995,7 +2002,7 @@ async function logoutAccount() {
   renderFullSettings(activeCompanion());
   try {
     await authRequest('/api/auth/logout', {});
-    billingUiState = { loading: false, configured: false, access: null, errorKey: '', checkoutPlan: '' };
+    billingUiState = { loading: false, configured: false, paddle: null, access: null, errorKey: '', checkoutPlan: '' };
     if (switchLocalDataOwner('')) render();
     await refreshAuthStatus({ renderSettings: false });
   } catch (error) {

@@ -20,16 +20,18 @@ test('billing status refresh never blocks authentication completion', () => {
   assert.doesNotMatch(appJs, /payload\.state === 'authenticated'\) await refreshCommerceStatus/);
 });
 
-test('checkout UI only accepts server-owned plan identifiers and safe URLs', () => {
+test('checkout UI accepts server-owned plans and opens only server-created transactions', () => {
   assert.match(appJs, /BILLING_PLANS\s*=\s*Object\.freeze\(\['standard', 'unlimited'\]\)/);
   assert.match(appJs, /BILLING_PLANS\.includes\(plan\)/);
-  assert.match(appJs, /checkoutUrl\.protocol\s*!==\s*'https:'/);
-  assert.match(appJs, /checkoutUrl\.hostname\.endsWith\('\.paddle\.com'\)/);
+  assert.match(appJs, /paddleCheckout\.open\(/);
+  assert.match(appJs, /transactionId:\s*payload\.transactionId/);
+  assert.doesNotMatch(appJs, /window\.location\.assign\(checkoutUrl/);
   assert.doesNotMatch(appJs, /priceId\s*:/);
 });
 
-test('commerce status reports whether hosted billing is configured', () => {
-  assert.match(serverJs, /billingConfigured:\s*billingRoutes\.configured/);
+test('commerce status reports Paddle.js client configuration only when billing is complete', () => {
+  assert.match(serverJs, /billingConfigured:\s*hostedBillingConfigured/);
+  assert.match(serverJs, /paddle:\s*paddleClientConfig/);
 });
 
 test('billing copy discloses trial, recurring prices, and fair use', () => {

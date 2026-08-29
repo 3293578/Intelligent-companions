@@ -18,6 +18,12 @@ details, or personal account information.
   ID and attaches the authenticated Wyth user ID as trusted metadata.
 - Only a verified, idempotently processed Paddle webhook may create or change a
   paid entitlement.
+- Paddle.js uses a sandbox client-side token (`test_...`) stored as
+  `PADDLE_CLIENT_TOKEN` in Render. It is separate from the server-only
+  `PADDLE_API_KEY`; neither value belongs in this catalog file.
+- The sandbox default payment link must be the approved staging origin
+  `https://staging.thewyth.com/`. The browser opens checkout from a
+  server-created transaction ID and never accepts a price ID from the user.
 - Wyth's one-day cardless trial starts after the first successful hosted AI
   reply and is not represented by a Paddle price trial.
 - Live products and prices must be created separately after account and domain

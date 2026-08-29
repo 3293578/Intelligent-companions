@@ -28,6 +28,7 @@ export function createBillingRouteHandler(options = {}) {
   const commerceClient = options.commerceClient || null;
   const webhookSecret = String(options.webhookSecret || '');
   const now = options.now || (() => Date.now());
+  const onDiagnostic = options.onDiagnostic || (() => {});
   const checkoutLimiter = options.checkoutLimiter || createCheckoutLimiter({ now });
   const configured = Boolean(billingClient && commerceClient && webhookSecret.length >= 12);
 
@@ -44,12 +45,18 @@ export function createBillingRouteHandler(options = {}) {
           userId,
           plan: request.body?.plan
         });
-        return response(200, {
-          transactionId: checkout.transactionId,
-          checkoutUrl: checkout.url
-        });
+        return response(200, { transactionId: checkout.transactionId });
       } catch (error) {
         if (error?.code === 'invalid_plan') return response(400, { error: 'invalid_plan' });
+        try {
+          onDiagnostic({
+            category: 'checkout',
+            providerStatus: Number.isInteger(error?.providerStatus) ? error.providerStatus : null,
+            providerCode: /^[a-z0-9_]{1,100}$/.test(error?.providerCode || '') ? error.providerCode : 'unknown'
+          });
+        } catch {
+          // Diagnostics must never change the client-facing checkout failure.
+        }
         return response(503, { error: 'billing_unavailable', retryable: true });
       }
     },

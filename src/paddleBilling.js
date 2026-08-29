@@ -15,10 +15,14 @@ const SUBSCRIPTION_EVENTS = new Set([
   'subscription.resumed'
 ]);
 
-function billingError(code, status = 400) {
+function billingError(code, status = 400, diagnostic = {}) {
   const error = new Error(code);
   error.code = code;
   error.status = status;
+  if (Number.isInteger(diagnostic.providerStatus)) error.providerStatus = diagnostic.providerStatus;
+  if (/^[a-z0-9_]{1,100}$/.test(diagnostic.providerCode || '')) {
+    error.providerCode = diagnostic.providerCode;
+  }
   return error;
 }
 
@@ -40,13 +44,6 @@ function checkoutOrigin(value) {
   if (url.protocol !== 'https:' && !['localhost', '127.0.0.1'].includes(url.hostname)) {
     throw billingError('invalid_checkout_url');
   }
-  return url.toString();
-}
-
-function verifiedPaddleCheckoutUrl(value) {
-  const url = new URL(String(value || ''));
-  const paddleHost = url.hostname === 'paddle.com' || url.hostname.endsWith('.paddle.com');
-  if (url.protocol !== 'https:' || !paddleHost) throw billingError('invalid_paddle_response', 502);
   return url.toString();
 }
 
@@ -90,14 +87,19 @@ export function createPaddleBillingClient(options = {}) {
     } catch {
       throw billingError('paddle_unavailable', 503);
     }
-    if (!response?.ok) throw billingError('paddle_unavailable', 503);
+    if (!response?.ok) {
+      const failure = await response?.json?.().catch(() => null);
+      throw billingError('paddle_unavailable', 503, {
+        providerStatus: response?.status,
+        providerCode: failure?.error?.code
+      });
+    }
     const payload = await response.json().catch(() => null);
     const transactionId = String(payload?.data?.id || '');
     if (!/^txn_[a-z0-9]{26}$/.test(transactionId)) {
       throw billingError('invalid_paddle_response', 502);
     }
-    const url = verifiedPaddleCheckoutUrl(payload?.data?.checkout?.url);
-    return { transactionId, url };
+    return { transactionId };
   }
 
   return { createCheckout };

@@ -13,6 +13,7 @@
 | `SENTRY_DSN` | 错误上报配置 | Render staging Environment | Render production Environment | 只按 Sentry 官方建议配置 |
 | `SENTRY_AUTH_TOKEN` | 构建上传 source map | GitHub Actions Secrets | GitHub Actions Secrets | 否 |
 | `PADDLE_API_KEY` | Paddle 服务端 API | Render staging Environment | Render production Environment | 否 |
+| `PADDLE_CLIENT_TOKEN` | Paddle.js 打开安全结账层；仅允许匹配环境的客户端令牌 | Render staging Environment | Render production Environment | 是（仅该客户端令牌） |
 | `PADDLE_WEBHOOK_SECRET` | 验证 Paddle webhook | Render staging Environment | Render production Environment | 否 |
 | `PADDLE_STANDARD_PRICE_ID` | Standard 套餐价格 ID | Render staging Environment | Render production Environment | 可公开，但按环境分开 |
 | `PADDLE_UNLIMITED_PRICE_ID` | Unlimited 套餐价格 ID | Render staging Environment | Render production Environment | 可公开，但按环境分开 |

@@ -18,7 +18,7 @@ test('Render staging blueprint uses the Node service, liveness health, and dashb
   for (const key of ['APP_ORIGIN', 'SUPABASE_URL', 'SUPABASE_PUBLISHABLE_KEY', 'SUPABASE_SECRET_KEY', 'DEEPSEEK_API_KEY']) {
     assert.match(blueprint, new RegExp(`key:\\s*${key}[\\s\\S]{0,80}sync:\\s*false`));
   }
-  for (const key of ['PADDLE_API_KEY', 'PADDLE_WEBHOOK_SECRET']) {
+  for (const key of ['PADDLE_API_KEY', 'PADDLE_CLIENT_TOKEN', 'PADDLE_WEBHOOK_SECRET']) {
     assert.match(blueprint, new RegExp(`key:\\s*${key}[\\s\\S]{0,80}sync:\\s*false`));
   }
   assert.match(blueprint, /key:\s*PADDLE_ENVIRONMENT[\s\S]{0,80}value:\s*sandbox/);

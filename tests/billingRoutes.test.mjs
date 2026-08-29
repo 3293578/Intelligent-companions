@@ -12,7 +12,7 @@ test('checkout route derives identity from the authenticated session, not reques
     billingClient: {
       async createCheckout(input) {
         calls.push(input);
-        return { transactionId: 'txn_01h00000000000000000000000', url: 'https://sandbox-checkout.paddle.com/pay/test' };
+        return { transactionId: 'txn_01h00000000000000000000000' };
       }
     },
     commerceClient: {},
@@ -24,7 +24,7 @@ test('checkout route derives identity from the authenticated session, not reques
   });
   assert.equal(result.status, 200);
   assert.deepEqual(calls[0], { userId: USER_ID, plan: 'standard' });
-  assert.equal(result.body.checkoutUrl, 'https://sandbox-checkout.paddle.com/pay/test');
+  assert.equal(result.body.transactionId, 'txn_01h00000000000000000000000');
 });
 
 test('webhook route verifies the raw body before synchronizing subscription state', async () => {
@@ -61,4 +61,30 @@ test('billing routes fail closed when not configured and sanitize provider failu
   const handler = createBillingRouteHandler();
   assert.equal((await handler.checkout({ authenticatedUser: { id: USER_ID }, body: { plan: 'standard' } })).status, 503);
   assert.equal((await handler.webhook({ rawBody: '{}', signatureHeader: '' })).status, 503);
+});
+
+test('checkout route records only allowlisted provider diagnostics', async () => {
+  const diagnostics = [];
+  const handler = createBillingRouteHandler({
+    billingClient: {
+      async createCheckout() {
+        throw Object.assign(new Error('provider detail'), {
+          providerStatus: 400,
+          providerCode: 'transaction_checkout_url_domain_is_not_approved',
+          secret: 'must-not-be-logged'
+        });
+      }
+    },
+    commerceClient: {},
+    webhookSecret: 'pdl_ntfset_test_secret',
+    onDiagnostic(value) { diagnostics.push(value); }
+  });
+  const result = await handler.checkout({ authenticatedUser: { id: USER_ID }, body: { plan: 'standard' } });
+  assert.deepEqual(result, { status: 503, body: { error: 'billing_unavailable', retryable: true } });
+  assert.deepEqual(diagnostics, [{
+    category: 'checkout',
+    providerStatus: 400,
+    providerCode: 'transaction_checkout_url_domain_is_not_approved'
+  }]);
+  assert.doesNotMatch(JSON.stringify(diagnostics), /provider detail|must-not-be-logged/);
 });

@@ -25,14 +25,14 @@ test('Paddle checkout accepts only the server-owned plan catalog and trusted use
       return new Response(JSON.stringify({
         data: {
           id: 'txn_01h00000000000000000000000',
-          checkout: { url: 'https://sandbox-checkout.paddle.com/pay/test' }
+          checkout: { url: 'https://staging.thewyth.com/?billing=return&_ptxn=txn_01h00000000000000000000000' }
         }
       }), { status: 201, headers: { 'content-type': 'application/json' } });
     }
   });
 
   const checkout = await client.createCheckout({ userId, plan: 'standard' });
-  assert.equal(checkout.url, 'https://sandbox-checkout.paddle.com/pay/test');
+  assert.deepEqual(checkout, { transactionId: 'txn_01h00000000000000000000000' });
   assert.equal(calls[0].url, 'https://sandbox-api.paddle.com/transactions');
   assert.equal(calls[0].options.headers.authorization, 'Bearer test-paddle-api-key-not-a-real-secret');
   const body = JSON.parse(calls[0].options.body);
@@ -43,7 +43,7 @@ test('Paddle checkout accepts only the server-owned plan catalog and trusted use
   await assert.rejects(() => client.createCheckout({ userId, plan: 'admin' }), /invalid_plan/);
 });
 
-test('Paddle checkout rejects a provider response that redirects outside Paddle', async () => {
+test('Paddle checkout ignores provider redirect URLs and trusts only the transaction ID', async () => {
   const client = createPaddleBillingClient({
     apiKey: 'test-paddle-api-key-not-a-real-secret',
     environment: 'sandbox',
@@ -60,9 +60,32 @@ test('Paddle checkout rejects a provider response that redirects outside Paddle'
     }), { status: 201, headers: { 'content-type': 'application/json' } })
   });
 
+  assert.deepEqual(await client.createCheckout({ userId, plan: 'standard' }), {
+    transactionId: 'txn_01h00000000000000000000000'
+  });
+});
+
+test('Paddle checkout preserves only a safe provider diagnostic code', async () => {
+  const client = createPaddleBillingClient({
+    apiKey: 'test-paddle-api-key-not-a-real-secret',
+    environment: 'sandbox',
+    checkoutUrl: 'https://staging.thewyth.com/',
+    priceIds: {
+      standard: 'pri_01kzszqc8792n88p0c90jd5r8c',
+      unlimited: 'pri_01kzszytcn2m8wdsgbqeasyrbh'
+    },
+    fetchImpl: async () => new Response(JSON.stringify({
+      error: {
+        code: 'transaction_checkout_url_domain_is_not_approved',
+        detail: 'secret provider detail must not escape'
+      }
+    }), { status: 400, headers: { 'content-type': 'application/json' } })
+  });
   await assert.rejects(
     () => client.createCheckout({ userId, plan: 'standard' }),
-    /invalid_paddle_response/
+    (error) => error.providerCode === 'transaction_checkout_url_domain_is_not_approved'
+      && error.providerStatus === 400
+      && !JSON.stringify(error).includes('secret provider detail')
   );
 });
 

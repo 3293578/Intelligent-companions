@@ -43,5 +43,7 @@ services:
         value: pri_01kzszytcn2m8wdsgbqeasyrbh
       - key: PADDLE_API_KEY
         sync: false
+      - key: PADDLE_CLIENT_TOKEN
+        sync: false
       - key: PADDLE_WEBHOOK_SECRET
         sync: false
