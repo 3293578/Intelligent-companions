@@ -47,6 +47,40 @@ button {
   overflow: hidden;
 }
 
+.site-legal-links {
+  position: fixed;
+  z-index: 6;
+  left: 16px;
+  bottom: 12px;
+  display: grid;
+  gap: 4px;
+  font-size: 10px;
+  line-height: 1.25;
+}
+
+.site-legal-links a {
+  color: rgba(243, 237, 228, 0.68);
+  text-decoration: none;
+}
+
+.site-legal-links a:hover,
+.site-legal-links a:focus-visible {
+  color: var(--accent-strong);
+  text-decoration: underline;
+}
+
+.billing-legal-consent {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  color: #d4ccbf;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.billing-legal-consent input { margin-top: 3px; }
+.billing-legal-consent a { color: var(--accent-strong); }
+
 .scene-viewport,
 .scene-layer,
 .scene-vignette {
@@ -1589,4 +1623,5 @@ legend {
   .preset-glimpses { grid-template-columns: 1fr 1fr; }
   .preset-glimpses button { min-height: 150px; }
   .onboarding-login { right: 16px; bottom: 16px; }
+  .site-legal-links { display: none; }
 }

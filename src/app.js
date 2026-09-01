@@ -246,6 +246,7 @@ let billingUiState = {
   errorKey: '',
   checkoutPlan: ''
 };
+let billingTermsAccepted = false;
 let backendMemoryStatus = {};
 let chatUiState = {
   pendingCompanionId: null,
@@ -1149,11 +1150,15 @@ function renderBillingSettings() {
     <p class="studio-muted">${tr('billing.trial')}</p>
     ${billingUiState.errorKey ? `<p class="auth-error" role="alert">${tr(billingUiState.errorKey)}</p>` : ''}
     ${!billingUiState.configured && !billingUiState.loading ? `<p class="studio-muted">${tr('billing.notConfigured')}</p>` : ''}
+    <label class="billing-legal-consent">
+      <input type="checkbox" data-billing-terms ${billingTermsAccepted ? 'checked' : ''} ${billingUiState.loading ? 'disabled' : ''}>
+      <span>${tr('billing.acceptPrefix')} <a href="/terms.html" target="_blank" rel="noopener">${tr('billing.termsLink')}</a>${tr('billing.policySeparator')}<a href="/refund.html" target="_blank" rel="noopener">${tr('billing.refundLink')}</a>${tr('billing.acceptSuffix')}</span>
+    </label>
     <div class="quick-actions billing-plans">
-      <button class="secondary-action" type="button" data-action="billing-checkout" data-plan="standard" ${checkoutDisabled ? 'disabled' : ''}>
+      <button class="secondary-action" type="button" data-action="billing-checkout" data-plan="standard" ${checkoutDisabled || !billingTermsAccepted ? 'disabled' : ''}>
         <strong>${tr('billing.standard.title')}</strong><span>${tr('billing.standard.description')}</span>
       </button>
-      <button class="secondary-action" type="button" data-action="billing-checkout" data-plan="unlimited" ${checkoutDisabled ? 'disabled' : ''}>
+      <button class="secondary-action" type="button" data-action="billing-checkout" data-plan="unlimited" ${checkoutDisabled || !billingTermsAccepted ? 'disabled' : ''}>
         <strong>${tr('billing.unlimited.title')}</strong><span>${tr('billing.unlimited.fairUse')}</span>
       </button>
     </div>
@@ -2946,6 +2951,14 @@ els.fullSettings.addEventListener('click', (event) => {
     closeFullSettings();
     openUtilityDrawer('vocabulary');
   }
+});
+
+els.fullSettings.addEventListener('change', (event) => {
+  const termsInput = event.target.closest('[data-billing-terms]');
+  if (!termsInput) return;
+  billingTermsAccepted = termsInput.checked;
+  renderFullSettings(activeCompanion());
+  els.fullSettingsContent.querySelector('[data-billing-terms]')?.focus();
 });
 els.fullSettings.addEventListener('submit', (event) => {
   const authForm = event.target.closest('[data-auth-form]');
