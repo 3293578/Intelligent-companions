@@ -246,7 +246,7 @@ test('supabase auth client maps safe credential, confirmation, and email rate-li
   );
 });
 
-test('signup and password recovery place allowlisted redirect in the request URL', async () => {
+test('signup, confirmation resend, and password recovery place allowlisted redirect in the request URL', async () => {
   const calls = [];
   const client = createSupabaseAuthClient({
     supabaseUrl: 'https://project.supabase.co',
@@ -258,10 +258,13 @@ test('signup and password recovery place allowlisted redirect in the request URL
   });
   const redirect = 'http://127.0.0.1:53128/?auth=confirmed';
   await client.signUp({ email: 'u@example.com', password: 'long-enough' }, redirect);
+  await client.resendSignUp(' U@Example.com ', redirect);
   await client.requestPasswordReset('u@example.com', 'http://127.0.0.1:53128/?auth=recovery');
 
   assert.equal(calls[0].url, `https://project.supabase.co/auth/v1/signup?redirect_to=${encodeURIComponent(redirect)}`);
   assert.deepEqual(JSON.parse(calls[0].options.body), { email: 'u@example.com', password: 'long-enough' });
-  assert.match(calls[1].url, /\/auth\/v1\/recover\?redirect_to=/);
-  assert.deepEqual(JSON.parse(calls[1].options.body), { email: 'u@example.com' });
+  assert.equal(calls[1].url, `https://project.supabase.co/auth/v1/resend?redirect_to=${encodeURIComponent(redirect)}`);
+  assert.deepEqual(JSON.parse(calls[1].options.body), { type: 'signup', email: 'u@example.com' });
+  assert.match(calls[2].url, /\/auth\/v1\/recover\?redirect_to=/);
+  assert.deepEqual(JSON.parse(calls[2].options.body), { email: 'u@example.com' });
 });

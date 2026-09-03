@@ -243,6 +243,11 @@ export function createSupabaseAuthClient(options = {}) {
       const suffix = redirectTo ? `?redirect_to=${encodeURIComponent(redirectTo)}` : '';
       return request(`/signup${suffix}`, { body: normalizeCredentials(credentials) });
     },
+    resendSignUp(email, redirectTo) {
+      const normalized = normalizeCredentials({ email, password: 'validation-only' }).email;
+      const suffix = redirectTo ? `?redirect_to=${encodeURIComponent(redirectTo)}` : '';
+      return request(`/resend${suffix}`, { body: { type: 'signup', email: normalized } });
+    },
     signIn(credentials) {
       return request('/token?grant_type=password', { body: normalizeCredentials(credentials) });
     },

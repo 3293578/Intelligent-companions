@@ -180,6 +180,7 @@ const els = {
   sceneOutgoing: document.querySelector('#sceneOutgoing'),
   utilityDrawer: document.querySelector('#utilityDrawer'),
   utilityDock: document.querySelector('#utilityDock'),
+  accountEntryButton: document.querySelector('#accountEntryButton'),
   closeDrawerButton: document.querySelector('#closeDrawerButton'),
   drawerTitle: document.querySelector('#drawerTitle'),
   avatarError: document.querySelector('#avatarError'),
@@ -624,6 +625,7 @@ function renderFirstUse() {
   });
   const visible = Boolean(activeStage);
   els.firstUse.hidden = !visible;
+  syncAccountEntry(visible);
   if (!visible) return;
   els.onboardingLoginButton.hidden = authUiState.state === 'authenticated';
   let activeSection = null;
@@ -643,6 +645,20 @@ function renderFirstUse() {
   `).join('');
   els.onboardingStorageError.textContent = interfaceStorageErrorKey ? tr(interfaceStorageErrorKey) : '';
   applyTranslatedAttributes(els.firstUse);
+}
+
+function syncAccountEntry(firstUseVisible = !els.firstUse.hidden) {
+  const authenticated = authUiState.state === 'authenticated';
+  els.accountEntryButton.hidden = Boolean(firstUseVisible);
+  els.accountEntryButton.textContent = tr(authenticated ? 'settings.full.account' : 'auth.login');
+  els.accountEntryButton.setAttribute('aria-label', tr('auth.openAccount'));
+}
+
+function openAccountSurface() {
+  if (authUiState.state !== 'authenticated') {
+    authUiState = reduceAuthState(authUiState, { type: 'MODE', mode: 'login' });
+  }
+  openFullSettingsSurface('account', { focus: 'auth' });
 }
 
 function createCompanionFromPreset(presetId) {
@@ -800,7 +816,7 @@ function openFullSettingsSurface(section = settingsState.activeSection, { focus 
   renderFullSettings(activeCompanion());
   window.setTimeout(() => {
     const focusTarget = focus === 'auth'
-      ? els.fullSettingsContent.querySelector('.auth-form input')
+      ? els.fullSettingsContent.querySelector('.auth-form input, .auth-card button, .auth-card h3')
       : els.fullSettingsNav.querySelector('[aria-current="page"]');
     focusTarget?.focus();
   }, 0);
@@ -1199,8 +1215,22 @@ function renderAccountSettings() {
 
 function renderAuthForm() {
   const mode = authUiState.mode;
+  const isVerification = mode === 'verify';
   const isReset = mode === 'reset';
   const isPassword = mode === 'password';
+  if (isVerification) {
+    return `<div class="studio-card auth-card auth-verification-card" aria-busy="${authUiState.busy}">
+      <div class="auth-card-heading"><span class="eyebrow">${tr('auth.verificationEyebrow')}</span><h3 tabindex="-1">${tr('auth.verificationTitle')}</h3><p class="studio-muted">${tr('auth.verificationDescription')}</p></div>
+      <p class="auth-verification-email">${escapeHtml(authFormEmail)}</p>
+      ${authUiState.noticeKey ? `<p class="auth-notice" id="auth-notice" role="status" aria-live="polite" tabindex="-1">${tr(authUiState.noticeKey)}</p>` : ''}
+      ${authUiState.errorKey ? `<p class="auth-error" id="auth-error" role="alert" tabindex="-1">${tr(authUiState.errorKey)}</p>` : ''}
+      <div class="auth-verification-actions">
+        <button class="primary-action" type="button" data-auth-mode="login" ${authUiState.busy ? 'disabled' : ''}>${tr('auth.confirmedSignIn')}</button>
+        <button class="secondary-action" type="button" data-action="auth-resend" ${authUiState.busy ? 'disabled' : ''}>${tr(authUiState.busy ? 'auth.working' : 'auth.resendConfirmation')}</button>
+      </div>
+      <p class="studio-muted auth-verification-help">${tr('auth.verificationHelp')}</p>
+    </div>`;
+  }
   const titleKey = isReset ? 'auth.resetTitle' : isPassword ? 'auth.newPasswordTitle' : mode === 'signup' ? 'auth.signupTitle' : 'auth.loginTitle';
   const submitKey = isReset ? 'auth.sendReset' : isPassword ? 'auth.savePassword' : mode === 'signup' ? 'auth.signup' : 'auth.login';
   const emailInvalid = authInvalidField === 'email';
@@ -1208,7 +1238,7 @@ function renderAuthForm() {
   return `<div class="studio-card auth-card" aria-busy="${authUiState.busy}">
     <div class="auth-card-heading"><span class="eyebrow">${tr('settings.account.signIn')}</span><h3>${tr(titleKey)}</h3><p class="studio-muted">${tr(isReset ? 'auth.resetDescription' : isPassword ? 'auth.newPasswordDescription' : 'auth.description')}</p></div>
     ${authUiState.noticeKey ? `<p class="auth-notice" id="auth-notice" role="status" aria-live="polite" tabindex="-1">${tr(authUiState.noticeKey)}</p>` : ''}
-    ${authUiState.errorKey ? `<p class="auth-error" id="auth-error" role="alert" tabindex="-1">${tr(authUiState.errorKey)}</p>${authUiState.errorKey === 'auth.error.unavailable' ? `<button class="secondary-action auth-retry-action" type="button" data-action="auth-retry">${tr('auth.retryConnection')}</button>` : ''}` : ''}
+    ${authUiState.errorKey ? `<p class="auth-error" id="auth-error" role="alert" tabindex="-1">${tr(authUiState.errorKey)}</p>${authUiState.errorKey === 'auth.error.unavailable' ? `<button class="secondary-action auth-retry-action" type="button" data-action="auth-retry">${tr('auth.retryConnection')}</button>` : ''}${['auth.error.credentials', 'auth.error.emailNotConfirmed'].includes(authUiState.errorKey) && authFormEmail ? `<button class="secondary-action auth-resend-action" type="button" data-action="auth-resend">${tr('auth.resendConfirmation')}</button>` : ''}` : ''}
     <form class="auth-form" data-auth-form="${mode}" novalidate>
       ${isPassword ? '' : `<label><span>${tr('profile.email')}</span><input name="email" type="email" autocomplete="email" inputmode="email" autocapitalize="none" spellcheck="false" maxlength="254" value="${escapeHtml(authFormEmail)}" ${emailInvalid ? 'aria-invalid="true" aria-describedby="auth-error"' : ''} required></label>`}
       ${isReset ? '' : `<label><span>${tr(isPassword ? 'auth.newPassword' : 'auth.password')}</span><input name="password" type="password" autocomplete="${isPassword || mode === 'signup' ? 'new-password' : 'current-password'}" minlength="8" maxlength="128" aria-describedby="auth-password-hint${passwordInvalid ? ' auth-error' : ''}" ${passwordInvalid ? 'aria-invalid="true"' : ''} required><small id="auth-password-hint">${tr('auth.passwordHint')}</small></label>`}
@@ -1817,7 +1847,7 @@ function hideTranslatePopover() {
 
 function authInvalidFieldFor(error) {
   if (error === 'invalid_email') return 'email';
-  if (error === 'invalid_password' || error === 'invalid_credentials') return 'password';
+  if (error === 'invalid_password') return 'password';
   return '';
 }
 
@@ -1977,7 +2007,7 @@ async function submitAuthForm(form) {
   try {
     if (mode === 'signup') {
       await authRequest('/api/auth/signup', { email: data.get('email'), password: data.get('password') });
-      authUiState = reduceAuthState(authUiState, { type: 'SUCCESS', noticeKey: 'auth.notice.checkEmail' });
+      authUiState = { ...reduceAuthState(authUiState, { type: 'SUCCESS', noticeKey: 'auth.notice.checkEmail' }), mode: 'verify' };
     } else if (mode === 'reset') {
       await authRequest('/api/auth/reset', { email: data.get('email') });
       authUiState = reduceAuthState(authUiState, { type: 'SUCCESS', noticeKey: 'auth.notice.resetSent' });
@@ -1998,6 +2028,21 @@ async function submitAuthForm(form) {
     authUiState = reduceAuthState(authUiState, { type: 'ERROR', errorKey: authErrorKey(error.code) });
   }
   window.clearTimeout(wakeTimer);
+  renderFullSettings(activeCompanion());
+  focusAuthFeedback();
+}
+
+async function resendSignupConfirmation() {
+  if (!authFormEmail || authUiState.busy) return;
+  authInvalidField = '';
+  authUiState = { ...reduceAuthState(authUiState, { type: 'BUSY' }), mode: 'verify' };
+  renderFullSettings(activeCompanion());
+  try {
+    await authRequest('/api/auth/resend', { email: authFormEmail });
+    authUiState = { ...reduceAuthState(authUiState, { type: 'SUCCESS', noticeKey: 'auth.notice.confirmationResent' }), mode: 'verify' };
+  } catch (error) {
+    authUiState = { ...reduceAuthState(authUiState, { type: 'ERROR', errorKey: authErrorKey(error.code) }), mode: 'verify' };
+  }
   renderFullSettings(activeCompanion());
   focusAuthFeedback();
 }
@@ -2917,6 +2962,7 @@ els.fullSettings.addEventListener('click', (event) => {
   if (action === 'edit-profile') openProfileDialog();
   if (action === 'auth-logout') logoutAccount();
   if (action === 'auth-retry') retryAuthConnection();
+  if (action === 'auth-resend') resendSignupConfirmation();
   if (action === 'billing-checkout') startBillingCheckout(actionButton.dataset.plan);
   if (action === 'edit-companion') openCompanionDialog('edit');
   if (action === 'delete-companion') deleteActiveCompanion();
@@ -3012,14 +3058,14 @@ els.firstUse.addEventListener('click', (event) => {
     return;
   }
   if (event.target.closest('[data-action="onboarding-login"]')) {
-    authUiState = reduceAuthState(authUiState, { type: 'MODE', mode: 'login' });
-    openFullSettingsSurface('account', { focus: 'auth' });
+    openAccountSurface();
     return;
   }
   const preset = event.target.closest('[data-preset-id]');
   if (preset) createCompanionFromPreset(preset.dataset.presetId);
   if (event.target.closest('[data-action="custom-companion"]')) openCompanionDialog('create');
 });
+els.accountEntryButton.addEventListener('click', openAccountSurface);
 els.onboardingBirthdayForm.addEventListener('submit', (event) => {
   event.preventDefault();
   const value = els.onboardingBirthday.value;

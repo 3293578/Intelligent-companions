@@ -83,7 +83,7 @@ export function createAuthRouteHandler(options = {}) {
 
   return async function handleAuthRoute(request) {
     const pathname = new URL(request.url, appOrigin).pathname;
-    const routes = new Set(['/api/auth/status', '/api/auth/confirm', '/api/auth/signup', '/api/auth/login', '/api/auth/reset', '/api/auth/password', '/api/auth/logout']);
+    const routes = new Set(['/api/auth/status', '/api/auth/confirm', '/api/auth/signup', '/api/auth/resend', '/api/auth/login', '/api/auth/reset', '/api/auth/password', '/api/auth/logout']);
     if (!routes.has(pathname)) return response(404, { error: 'not_found' });
     if (!configured) {
       if (pathname === '/api/auth/status') return response(200, { configured: false, state: 'local' });
@@ -144,6 +144,15 @@ export function createAuthRouteHandler(options = {}) {
       if (pathname === '/api/auth/signup' && request.method === 'POST') {
         await authClient.signUp(request.body, `${appOrigin}/?auth=confirmed`);
         return response(200, { ok: true, verificationRequired: true });
+      }
+      if (pathname === '/api/auth/resend' && request.method === 'POST') {
+        try {
+          await authClient.resendSignUp(request.body?.email, `${appOrigin}/?auth=confirmed`);
+        } catch (error) {
+          if (['invalid_email', 'too_many_requests', 'auth_unavailable'].includes(error?.code) || error?.status === 429 || isAuthUnavailableError(error)) throw error;
+          // Keep account existence private: an unknown address receives the same result.
+        }
+        return response(200, { ok: true });
       }
       if (pathname === '/api/auth/login' && request.method === 'POST') {
         const session = await authClient.signIn(request.body);

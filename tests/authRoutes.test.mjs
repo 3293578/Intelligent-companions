@@ -128,6 +128,28 @@ test('signup reports verification without revealing whether an account already e
   assert.equal(calls[0].redirectTo, `${origin}/?auth=confirmed`);
 });
 
+test('resending signup confirmation stays generic and keeps the allowlisted redirect', async () => {
+  const calls = [];
+  const authClient = {
+    async resendSignUp(email, redirectTo) { calls.push({ email, redirectTo }); }
+  };
+  const handle = createAuthRouteHandler({ configured: true, authClient, appOrigin: origin });
+  const result = await handle(request('/api/auth/resend', { method: 'POST', body: { email: 'u@example.com' } }));
+  assert.equal(result.status, 200);
+  assert.deepEqual(result.body, { ok: true });
+  assert.deepEqual(calls, [{ email: 'u@example.com', redirectTo: `${origin}/?auth=confirmed` }]);
+});
+
+test('confirmation resend does not reveal whether the account exists', async () => {
+  const authClient = {
+    async resendSignUp() { throw Object.assign(new Error('provider detail'), { code: 'user_not_found', status: 400 }); }
+  };
+  const handle = createAuthRouteHandler({ configured: true, authClient, appOrigin: origin });
+  const result = await handle(request('/api/auth/resend', { method: 'POST', body: { email: 'unknown@example.com' } }));
+  assert.equal(result.status, 200);
+  assert.deepEqual(result.body, { ok: true });
+});
+
 test('email confirmation verifies a one-time hash server-side and redirects without tokens', async () => {
   let userLookups = 0;
   const authClient = {

@@ -48,6 +48,8 @@
       <button class="dock-button" type="button" data-action="open-drawer" data-drawer="settings" data-i18n-aria-label="accessibility.openSettings" aria-label="Open settings">···</button>
     </nav>
 
+    <button class="account-entry" id="accountEntryButton" type="button" data-i18n="auth.login" data-i18n-aria-label="auth.openAccount" aria-label="登录或管理账号">登录</button>
+
     <nav class="site-legal-links" aria-label="Legal and support">
       <a href="/privacy.html" target="_blank" rel="noopener">隐私 / Privacy</a>
       <a href="/terms.html" target="_blank" rel="noopener">条款 / Terms</a>
@@ -79,11 +81,15 @@
     </section>
 
     <section class="first-use" id="firstUse" hidden aria-labelledby="firstUseWelcomeTitle">
-      <div class="onboarding-language" id="interfaceLanguageSwitch" role="group" data-i18n-aria-label="accessibility.interfaceLanguage" aria-label="Interface language">
-        <button type="button" data-locale="zh-CN" data-i18n-aria-label="accessibility.localeChinese" aria-label="切换为简体中文" aria-pressed="true">中</button>
-        <span aria-hidden="true">/</span>
-        <button type="button" data-locale="en" data-i18n-aria-label="accessibility.localeEnglish" aria-label="Switch to English" aria-pressed="false">EN</button>
-      </div>
+      <nav class="onboarding-account-nav" data-i18n-aria-label="auth.onboardingActions" aria-label="语言和账号">
+        <div class="onboarding-language" id="interfaceLanguageSwitch" role="group" data-i18n-aria-label="accessibility.interfaceLanguage" aria-label="Interface language">
+          <button type="button" data-locale="zh-CN" data-i18n-aria-label="accessibility.localeChinese" aria-label="切换为简体中文" aria-pressed="true">中</button>
+          <span aria-hidden="true">/</span>
+          <button type="button" data-locale="en" data-i18n-aria-label="accessibility.localeEnglish" aria-label="Switch to English" aria-pressed="false">EN</button>
+        </div>
+        <span class="onboarding-account-divider" aria-hidden="true"></span>
+        <button class="onboarding-login" id="onboardingLoginButton" type="button" data-action="onboarding-login" data-i18n="auth.login">登录</button>
+      </nav>
       <p class="onboarding-error onboarding-storage-error" id="onboardingStorageError" role="alert" aria-live="polite"></p>
       <section class="onboarding-step onboarding-welcome" data-onboarding-stage="welcome" tabindex="-1">
         <span class="onboarding-eyebrow" data-i18n="brand.tagline">with warmth</span>
@@ -129,7 +135,6 @@
         <div class="preset-glimpses" id="onboardingPresetList"></div>
         <button class="first-use-custom" type="button" data-action="custom-companion" data-i18n="onboarding.createCustom">创建自己的角色</button>
       </section>
-      <button class="onboarding-login" id="onboardingLoginButton" type="button" data-action="onboarding-login" data-i18n="auth.login">登录</button>
     </section>
   </div>
 

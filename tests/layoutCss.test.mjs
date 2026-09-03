@@ -406,6 +406,26 @@ test('first use distinguishes returning users and keeps an accessible sign-in sh
   assert.match(css, /\.onboarding-login:focus-visible/);
 });
 
+test('account access is persistent and onboarding groups sign-in with language controls', () => {
+  assert.match(html, /id="accountEntryButton"[^>]*type="button"/);
+  assert.match(html, /class="onboarding-account-nav"/);
+  assert.match(html, /class="onboarding-account-divider"/);
+  assert.match(appJs, /accountEntryButton:\s*document\.querySelector\('#accountEntryButton'\)/);
+  assert.match(appJs, /accountEntryButton\.addEventListener\('click',\s*openAccountSurface\)/);
+  assert.match(css, /\.account-entry\s*\{/);
+  assert.match(css, /\.onboarding-account-nav\s*\{/);
+});
+
+test('signup has an explicit email verification state and confirmation resend action', () => {
+  assert.match(appJs, /mode === 'verify'/);
+  assert.match(appJs, /data-action="auth-resend"/);
+  assert.match(appJs, /authRequest\('\/api\/auth\/resend'/);
+  assert.match(appJs, /mode:\s*'verify'/);
+  assert.match(appJs, /error === 'invalid_password'\) return 'password'/);
+  assert.doesNotMatch(appJs, /error === 'invalid_password' \|\| error === 'invalid_credentials'/);
+  assert.match(css, /\.auth-verification-actions\s*\{/);
+});
+
 test('authenticated first use skips the returning gate and removes the redundant login shortcut', () => {
   assert.match(appJs, /resolveOnboardingStage\(\{[\s\S]*?authState:\s*authUiState\.state/);
   assert.match(appJs, /onboardingLoginButton\.hidden\s*=\s*authUiState\.state\s*===\s*'authenticated'/);
