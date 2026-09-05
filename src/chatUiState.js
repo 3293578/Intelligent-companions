@@ -26,6 +26,13 @@ export function chatFailureMessageKey(errorCode) {
   if (errorCode === 'authentication_required' || errorCode === 'email_not_verified') {
     return 'error.chatAuthenticationRequired';
   }
+  if (errorCode === 'not_entitled') return 'error.chatSubscriptionRequired';
+  if (errorCode === 'allowance_exhausted') return 'error.chatAllowanceExhausted';
+  if (errorCode === 'fair_use_review') return 'error.chatFairUseReview';
+  if (errorCode === 'commerce_unavailable') return 'error.chatCommerceUnavailable';
+  if (errorCode === 'too_many_requests' || errorCode === 'daily_request_limit') {
+    return 'error.chatRateLimited';
+  }
   return 'error.chatUnavailable';
 }
 

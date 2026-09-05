@@ -416,6 +416,14 @@ test('account access is persistent and onboarding groups sign-in with language c
   assert.match(css, /\.onboarding-account-nav\s*\{/);
 });
 
+test('legal and support links live in a framed top-right menu on desktop and mobile', () => {
+  assert.match(html, /<details class="site-legal-menu">/);
+  assert.match(html, /class="site-legal-links"/);
+  assert.match(css, /\.site-legal-menu\s*\{[\s\S]*?position:\s*fixed;[\s\S]*?right:/);
+  assert.match(css, /\.site-legal-links\s+a\s*\{[\s\S]*?border:/);
+  assert.doesNotMatch(css, /\.site-legal-links\s*\{\s*display:\s*none/);
+});
+
 test('signup has an explicit email verification state and confirmation resend action', () => {
   assert.match(appJs, /mode === 'verify'/);
   assert.match(appJs, /data-action="auth-resend"/);

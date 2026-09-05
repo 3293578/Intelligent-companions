@@ -17,6 +17,10 @@ test('chat failures distinguish account verification outages from model outages'
   assert.equal(chatFailureMessageKey('auth_unavailable'), 'error.chatAuthUnavailable');
   assert.equal(chatFailureMessageKey('authentication_required'), 'error.chatAuthenticationRequired');
   assert.equal(chatFailureMessageKey('model_unavailable'), 'error.chatUnavailable');
+  assert.equal(chatFailureMessageKey('not_entitled'), 'error.chatSubscriptionRequired');
+  assert.equal(chatFailureMessageKey('allowance_exhausted'), 'error.chatAllowanceExhausted');
+  assert.equal(chatFailureMessageKey('commerce_unavailable'), 'error.chatCommerceUnavailable');
+  assert.equal(chatFailureMessageKey('too_many_requests'), 'error.chatRateLimited');
 });
 
 test('blocks duplicate sends while a companion reply is pending', () => {

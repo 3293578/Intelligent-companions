@@ -80,11 +80,21 @@ test('checkout route records only allowlisted provider diagnostics', async () =>
     onDiagnostic(value) { diagnostics.push(value); }
   });
   const result = await handler.checkout({ authenticatedUser: { id: USER_ID }, body: { plan: 'standard' } });
-  assert.deepEqual(result, { status: 503, body: { error: 'billing_unavailable', retryable: true } });
+  assert.deepEqual(result, { status: 503, body: { error: 'billing_domain_pending', retryable: false } });
   assert.deepEqual(diagnostics, [{
     category: 'checkout',
     providerStatus: 400,
     providerCode: 'transaction_checkout_url_domain_is_not_approved'
   }]);
   assert.doesNotMatch(JSON.stringify(diagnostics), /provider detail|must-not-be-logged/);
+});
+
+test('checkout route keeps unknown provider failures generic', async () => {
+  const handler = createBillingRouteHandler({
+    billingClient: { async createCheckout() { throw new Error('provider detail'); } },
+    commerceClient: {},
+    webhookSecret: 'pdl_ntfset_test_secret'
+  });
+  const result = await handler.checkout({ authenticatedUser: { id: USER_ID }, body: { plan: 'standard' } });
+  assert.deepEqual(result, { status: 503, body: { error: 'billing_unavailable', retryable: true } });
 });

@@ -650,7 +650,9 @@ function renderFirstUse() {
 function syncAccountEntry(firstUseVisible = !els.firstUse.hidden) {
   const authenticated = authUiState.state === 'authenticated';
   els.accountEntryButton.hidden = Boolean(firstUseVisible);
-  els.accountEntryButton.textContent = tr(authenticated ? 'settings.full.account' : 'auth.login');
+  const labelKey = authenticated ? 'settings.full.account' : 'auth.login';
+  els.accountEntryButton.dataset.i18n = labelKey;
+  els.accountEntryButton.textContent = tr(labelKey);
   els.accountEntryButton.setAttribute('aria-label', tr('auth.openAccount'));
 }
 
@@ -1947,7 +1949,7 @@ async function startBillingCheckout(plan) {
       body: JSON.stringify({ plan })
     });
     const payload = await response.json().catch(() => ({}));
-    if (!response.ok || !payload.transactionId) throw new Error('billing_unavailable');
+    if (!response.ok || !payload.transactionId) throw new Error(payload.error || 'billing_unavailable');
     await paddleCheckout.open({
       transactionId: payload.transactionId,
       config: billingUiState.paddle,
@@ -1955,8 +1957,13 @@ async function startBillingCheckout(plan) {
     });
     billingUiState = { ...billingUiState, loading: false, errorKey: '', checkoutPlan: '' };
     renderFullSettings(activeCompanion());
-  } catch {
-    billingUiState = { ...billingUiState, loading: false, errorKey: 'billing.error.checkout', checkoutPlan: '' };
+  } catch (error) {
+    const errorKey = error?.message === 'billing_domain_pending'
+      ? 'billing.error.domainPending'
+      : error?.message === 'too_many_requests'
+        ? 'billing.error.rateLimited'
+        : 'billing.error.checkout';
+    billingUiState = { ...billingUiState, loading: false, errorKey, checkoutPlan: '' };
     renderFullSettings(activeCompanion());
   }
 }

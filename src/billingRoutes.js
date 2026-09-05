@@ -23,6 +23,13 @@ function createCheckoutLimiter(options = {}) {
   };
 }
 
+function publicCheckoutFailure(error) {
+  if (error?.providerCode === 'transaction_checkout_url_domain_is_not_approved') {
+    return response(503, { error: 'billing_domain_pending', retryable: false });
+  }
+  return response(503, { error: 'billing_unavailable', retryable: true });
+}
+
 export function createBillingRouteHandler(options = {}) {
   const billingClient = options.billingClient || null;
   const commerceClient = options.commerceClient || null;
@@ -57,7 +64,7 @@ export function createBillingRouteHandler(options = {}) {
         } catch {
           // Diagnostics must never change the client-facing checkout failure.
         }
-        return response(503, { error: 'billing_unavailable', retryable: true });
+        return publicCheckoutFailure(error);
       }
     },
 
