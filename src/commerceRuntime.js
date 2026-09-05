@@ -4,7 +4,7 @@ export function createCommerceRuntime(options = {}) {
   const client = options.client || null;
   const required = options.required === true;
   const now = options.now || (() => new Date());
-  const standardAllowanceUsd = Number(options.standardAllowanceUsd) || 4;
+  const standardAllowanceUsd = Number(options.standardAllowanceUsd) || 2;
   const pricing = options.pricing || {};
 
   return {

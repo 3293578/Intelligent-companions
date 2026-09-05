@@ -23,6 +23,8 @@ services:
         value: deepseek-v4-flash
       - key: COMMERCE_REQUIRED
         value: "1"
+      - key: STANDARD_ALLOWANCE_USD
+        value: "2"
       - key: APP_ORIGIN
         value: https://thewyth.com
       - key: SUPABASE_URL

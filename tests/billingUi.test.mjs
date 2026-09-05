@@ -41,8 +41,12 @@ test('billing copy discloses trial, recurring prices, and fair use', () => {
     'billing.standard.title',
     'billing.unlimited.title',
     'billing.unlimited.fairUse',
-    'billing.notConfigured'
+    'billing.notConfigured',
+    'billing.error.onboardingIncomplete'
   ]) {
     assert.match(i18nJs, new RegExp(`\\['${key}'`));
   }
+  assert.match(i18nJs, /\['billing\.standard\.title', 'Standard · \$5\/月', 'Standard · \$5\/month'\]/);
+  assert.match(i18nJs, /\['billing\.standard\.description', '[^']*2 美元[^']*', 'Includes about \$2 of monthly model usage\./);
+  assert.match(i18nJs, /\['billing\.unlimited\.title', 'Unlimited · \$10\/月', 'Unlimited · \$10\/month'\]/);
 });

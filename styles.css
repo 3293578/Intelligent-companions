@@ -1597,6 +1597,11 @@ legend {
 .account-entry { position: fixed; z-index: 8; top: clamp(18px,3vw,32px); right: clamp(18px,3vw,38px); min-width: 88px; min-height: 44px; border: 1px solid rgba(231,194,142,.54); border-radius: 999px; padding: 0 20px; color: #18140f; background: #e7c28e; box-shadow: 0 16px 46px rgba(0,0,0,.42); font-weight: 850; letter-spacing: .02em; }
 .account-entry:hover { background: #f0cd9c; transform: translateY(-1px); }
 .account-entry:focus-visible { outline: 3px solid #fff3df; outline-offset: 3px; }
+.global-language-switch { position: fixed; z-index: 8; top: clamp(18px,3vw,32px); right: calc(clamp(18px,3vw,38px) + 104px); min-height: 44px; display: flex; align-items: center; gap: 3px; border: 1px solid rgba(231,194,142,.42); border-radius: 999px; padding: 4px; color: #c8c0b5; background: rgba(15,15,14,.78); box-shadow: 0 16px 46px rgba(0,0,0,.32); backdrop-filter: blur(14px); }
+.global-language-switch button { min-width: 36px; min-height: 34px; border: 0; border-radius: 999px; padding: 0 8px; color: #d4ccc0; background: transparent; font-weight: 750; }
+.global-language-switch button:hover { color: #fff3df; background: rgba(255,255,255,.08); }
+.global-language-switch button[aria-pressed="true"] { color: #17130f; background: #e7c28e; }
+.global-language-switch button:focus-visible { outline: 3px solid #fff3df; outline-offset: 3px; }
 .onboarding-account-nav { position: fixed; z-index: 3; top: clamp(18px,3vw,34px); right: clamp(18px,4vw,54px); display: flex; align-items: center; gap: 12px; padding: 6px; border: 1px solid rgba(255,255,255,.12); border-radius: 999px; background: rgba(15,15,14,.72); box-shadow: 0 18px 50px rgba(0,0,0,.28); backdrop-filter: blur(14px); }
 .onboarding-language { display: flex; align-items: center; gap: 6px; color: #c8c0b5; }
 .onboarding-language button { min-width: 42px; min-height: 42px; border: 0; border-radius: 999px; color: #d4ccc0; background: transparent; font-weight: 700; }
@@ -1676,6 +1681,8 @@ legend {
   .form-grid, .checkbox-grid { grid-template-columns: 1fr; }
   .first-use { align-content: start; overflow: auto; padding: 112px 16px 34px; }
   .account-entry { top: 18px; right: 16px; min-width: 76px; min-height: 40px; padding: 0 16px; }
+  .global-language-switch { top: 18px; right: 104px; min-height: 40px; }
+  .global-language-switch button { min-width: 32px; min-height: 30px; padding: 0 6px; }
   .site-legal-menu { top: 66px; right: 16px; }
   .site-legal-menu summary { min-height: 38px; padding: 0 14px; font-size: 12px; }
   .site-legal-links { width: min(218px,calc(100vw - 32px)); }

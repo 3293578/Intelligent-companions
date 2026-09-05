@@ -181,6 +181,7 @@ const els = {
   utilityDrawer: document.querySelector('#utilityDrawer'),
   utilityDock: document.querySelector('#utilityDock'),
   accountEntryButton: document.querySelector('#accountEntryButton'),
+  globalLanguageSwitch: document.querySelector('#globalLanguageSwitch'),
   closeDrawerButton: document.querySelector('#closeDrawerButton'),
   drawerTitle: document.querySelector('#drawerTitle'),
   avatarError: document.querySelector('#avatarError'),
@@ -367,6 +368,9 @@ function applyInterfaceLocale({ rerender = false } = {}) {
   els.firstUse.querySelectorAll('[data-locale]').forEach((button) => {
     button.setAttribute('aria-pressed', String(button.dataset.locale === locale));
   });
+  els.globalLanguageSwitch.querySelectorAll('[data-global-locale]').forEach((button) => {
+    button.setAttribute('aria-pressed', String(button.dataset.globalLocale === locale));
+  });
   if (activeDrawer) {
     els.drawerTitle.textContent = tr(activeDrawer === 'vocabulary' ? 'vocabulary.title' : 'settings.title');
   }
@@ -392,9 +396,11 @@ function changeInterfaceLocale(locale, source) {
       return;
     }
     const selector = `[data-locale="${onboarding.interfaceLocale}"]`;
-    const button = source === 'drawer' && activeDrawer === 'settings'
-      ? els.studioPanel.querySelector(selector)
-      : els.interfaceLanguageSwitch.querySelector(selector);
+    const button = source === 'global'
+      ? els.globalLanguageSwitch.querySelector(`[data-global-locale="${onboarding.interfaceLocale}"]`)
+      : source === 'drawer' && activeDrawer === 'settings'
+        ? els.studioPanel.querySelector(selector)
+        : els.interfaceLanguageSwitch.querySelector(selector);
     if (button && button.getClientRects().length > 0) button.focus();
   });
 }
@@ -650,6 +656,7 @@ function renderFirstUse() {
 function syncAccountEntry(firstUseVisible = !els.firstUse.hidden) {
   const authenticated = authUiState.state === 'authenticated';
   els.accountEntryButton.hidden = Boolean(firstUseVisible);
+  els.globalLanguageSwitch.hidden = Boolean(firstUseVisible);
   const labelKey = authenticated ? 'settings.full.account' : 'auth.login';
   els.accountEntryButton.dataset.i18n = labelKey;
   els.accountEntryButton.textContent = tr(labelKey);
@@ -1958,11 +1965,13 @@ async function startBillingCheckout(plan) {
     billingUiState = { ...billingUiState, loading: false, errorKey: '', checkoutPlan: '' };
     renderFullSettings(activeCompanion());
   } catch (error) {
-    const errorKey = error?.message === 'billing_domain_pending'
-      ? 'billing.error.domainPending'
-      : error?.message === 'too_many_requests'
-        ? 'billing.error.rateLimited'
-        : 'billing.error.checkout';
+    const errorKey = error?.message === 'billing_onboarding_incomplete'
+      ? 'billing.error.onboardingIncomplete'
+      : error?.message === 'billing_domain_pending'
+        ? 'billing.error.domainPending'
+        : error?.message === 'too_many_requests'
+          ? 'billing.error.rateLimited'
+          : 'billing.error.checkout';
     billingUiState = { ...billingUiState, loading: false, errorKey, checkoutPlan: '' };
     renderFullSettings(activeCompanion());
   }
@@ -3073,6 +3082,10 @@ els.firstUse.addEventListener('click', (event) => {
   if (event.target.closest('[data-action="custom-companion"]')) openCompanionDialog('create');
 });
 els.accountEntryButton.addEventListener('click', openAccountSurface);
+els.globalLanguageSwitch.addEventListener('click', (event) => {
+  const localeButton = event.target.closest('[data-global-locale]');
+  if (localeButton) changeInterfaceLocale(localeButton.dataset.globalLocale, 'global');
+});
 els.onboardingBirthdayForm.addEventListener('submit', (event) => {
   event.preventDefault();
   const value = els.onboardingBirthday.value;

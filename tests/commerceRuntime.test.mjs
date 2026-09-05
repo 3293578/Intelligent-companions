@@ -21,8 +21,10 @@ test('optional staging commerce bypasses safely while required production fails 
 
 test('runtime delegates access and writes priced provider metrics after success', async () => {
   const writes = [];
+  const accessChecks = [];
   const client = {
-    async getAccess() {
+    async getAccess(value) {
+      accessChecks.push(value);
       return { allowed: true, plan: 'trial_pending', reason: 'first_reply_starts_trial' };
     },
     async recordSuccessfulUse(value) { writes.push(value); }
@@ -39,6 +41,7 @@ test('runtime delegates access and writes priced provider metrics after success'
     usage: { inputTokens: 1_000_000, cachedInputTokens: 250_000, outputTokens: 100_000 }
   });
   assert.equal(writes[0].startTrial, true);
+  assert.equal(accessChecks[0].standardAllowanceUsd, 2);
   assert.equal(writes[0].estimatedCostUsd, 0.1337);
   assert.equal(writes[0].successfulAt, '2026-08-25T10:00:00.000Z');
 });

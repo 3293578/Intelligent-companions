@@ -26,6 +26,7 @@ test('Render staging blueprint uses the Node service, liveness health, and dashb
   assert.match(blueprint, /key:\s*PADDLE_UNLIMITED_PRICE_ID[\s\S]{0,100}pri_01kzszytcn2m8wdsgbqeasyrbh/);
   assert.match(blueprint, /key:\s*AUTH_RECOVERY_SECRET[\s\S]{0,80}generateValue:\s*true/);
   assert.match(blueprint, /key:\s*COMMERCE_REQUIRED[\s\S]{0,80}value:\s*['"]?0/);
+  assert.match(blueprint, /key:\s*STANDARD_ALLOWANCE_USD[\s\S]{0,80}value:\s*['"]?2/);
   assert.match(blueprint, /key:\s*LLM_MODEL[\s\S]{0,80}value:\s*deepseek-v4-flash/);
   assert.doesNotMatch(blueprint, /sb_publishable_[a-z0-9_-]{20,}|sk-[a-z0-9_-]{20,}|@qq\.com/i);
 });
@@ -38,6 +39,7 @@ test('Render production blueprint is isolated, paid, review-gated, and live-comm
   assert.match(blueprint, /autoDeployTrigger:\s*off/);
   assert.match(blueprint, /key:\s*APP_ORIGIN[\s\S]{0,80}value:\s*https:\/\/thewyth\.com/);
   assert.match(blueprint, /key:\s*COMMERCE_REQUIRED[\s\S]{0,80}value:\s*['"]?1/);
+  assert.match(blueprint, /key:\s*STANDARD_ALLOWANCE_USD[\s\S]{0,80}value:\s*['"]?2/);
   assert.match(blueprint, /key:\s*PADDLE_ENVIRONMENT[\s\S]{0,80}value:\s*production/);
   for (const key of [
     'SUPABASE_URL',

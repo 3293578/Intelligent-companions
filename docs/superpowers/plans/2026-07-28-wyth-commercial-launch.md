@@ -84,8 +84,8 @@ RLS defaults to deny. Policies use `(select auth.uid())`, and all RLS/FK columns
 Use one pure server-side `resolveEntitlement(userId, now)` function backed by the entitlement ledger.
 
 - `trial`: one 24-hour period beginning with the first successful AI conversation. It requires no card and never converts automatically.
-- `standard`: active provider subscription at USD 10/month with a monthly model-cost allowance targeting approximately USD 4 at current provider prices.
-- `unlimited`: active provider subscription at USD 20/month with no ordinary user-facing message meter, subject to fair use, automated abuse protection, and an operator emergency ceiling.
+- `standard`: active provider subscription at USD 5/month with a monthly model-cost allowance targeting approximately USD 2 at current provider prices.
+- `unlimited`: active provider subscription at USD 10/month with no ordinary user-facing message meter, subject to fair use, automated abuse protection, and an operator emergency ceiling.
 - `referral`: seven additional days for the inviter after the invited account completes registration and email verification. Rewards may accumulate without a published count cap, but suspicious rewards can remain pending or be reversed.
 - `grace`: short billing-recovery window only if explicitly approved.
 - `expired`: local chat history remains accessible/exportable, but new hosted AI messages require an active plan or purchased allowance.
@@ -133,7 +133,7 @@ The database, not localStorage, records whether a trial was consumed. Device/IP/
 - [ ] Create separate Supabase staging/production projects.
 - [ ] Apply to Paddle as an individual/sole trader after a public staging site, pricing page, terms, privacy policy, refund policy, and product description are ready; approval is not assumed.
 - [ ] Register and verify a PayPal China individual seller account in parallel, then request/enable global checkout and subscription capabilities available to the approved account.
-- [ ] Create sandbox/test and live USD 10 Standard, USD 20 Unlimited, and one-time top-up products only after the selected provider approves the merchant account.
+- [ ] Create live USD 5 Standard, USD 10 Unlimited, and one-time top-up prices after the selected provider approves the merchant account. Existing sandbox prices remain test-only.
 - [ ] Create managed Node staging/production services with health checks and rolling deploys.
 - [ ] Configure custom domain, HTTPS, DNS, environment validation, secret rotation, and restricted CORS origins.
 - [ ] Add CI for tests, migrations, dependency audit, and staging deployment.
@@ -211,7 +211,7 @@ The database, not localStorage, records whether a trial was consumed. Device/IP/
 - [ ] If Paddle does not approve the account promptly, implement PayPal China Subscriptions for voluntary USD plans and one-time checkout for top-ups; document that Wyth remains the direct merchant and needs accounting/tax review.
 - [ ] Attach the internal user ID as trusted server-created metadata.
 - [ ] Use the selected provider's customer subscription-management experience for payment method changes, invoices/receipts, and cancellation.
-- [ ] Offer Standard at USD 10/month and Unlimited at USD 20/month with explicit allowance/fair-use wording.
+- [ ] Offer Standard at USD 5/month and Unlimited at USD 10/month with explicit allowance/fair-use wording.
 - [ ] Keep the trial card-free. Ask for payment details only when the user voluntarily subscribes or purchases an additional usage package.
 - [ ] Show localized pricing, trial conversion date, renewal date, usage state, cancellation state, and billing-support link.
 
@@ -259,7 +259,7 @@ The database, not localStorage, records whether a trial was consumed. Device/IP/
 - [ ] Bound recent messages and memory by token budget before each call.
 - [ ] Meter input/output tokens, latency, status, estimated provider cost, plan, billing month, and entitlement ID without storing chat text or secrets.
 - [ ] Add per-user, per-IP, and global spend/rate limits plus emergency kill switch.
-- [ ] Standard plan enforces a dynamic monthly provider-cost budget targeting USD 4, derived from actual token usage and versioned provider pricing rather than a permanently fixed token number.
+- [ ] Standard plan enforces a dynamic monthly provider-cost budget targeting USD 2, derived from actual token usage and versioned provider pricing rather than a permanently fixed token number.
 - [ ] When the Standard allowance is exhausted, pause new hosted AI messages and show two voluntary actions: upgrade to Unlimited or buy a one-time additional usage package. Never silently lower reply quality.
 - [ ] Implement top-ups as provider one-time products/prices and an append-only allowance ledger; webhook confirmation grants usage idempotently and refunds reverse unused allowance according to policy.
 - [ ] Unlimited plan hides ordinary quota progress but still enforces anti-automation, account-sharing, denial-of-wallet, and emergency cost controls under a published fair-use policy.
@@ -335,7 +335,7 @@ The database, not localStorage, records whether a trial was consumed. Device/IP/
 2. Email/password authentication with email verification required by the implementation.
 3. Trial starts at the first successful AI conversation; users may attach a card and explicitly choose automatic conversion.
 4. Referral reward is seven days for the inviter after registration/email verification; legitimate rewards have no published accumulation cap.
-5. USD 10 Standard plan targets approximately USD 4 of provider usage per billing month; USD 20 Unlimited plan uses fair-use and emergency abuse controls.
+5. USD 5 Standard plan targets approximately USD 2 of provider usage per billing month; USD 10 Unlimited plan uses fair-use and emergency abuse controls.
 6. Cloud sync includes vocabulary, birthday/profile metadata, preferences, and avatars. Chats, companions, and companion memories remain local and must be clearly disclosed.
 7. Minors may use non-romantic companionship. The backend derives an eligibility flag; the product does not expose a stigmatizing "minor mode" label, while the age/privacy explanation remains transparent.
 8. No domain or production cloud stack exists yet. Setup will be taught one managed provider at a time using the beginner runbook.
@@ -355,10 +355,10 @@ Registration-triggered uncapped referrals are a major fraud/liability risk, so m
 
 The one-time top-up package price and included provider-cost allowance will be set after staging usage measurements. It must preserve a positive gross margin and display the granted allowance clearly before checkout; this operational price does not block Phase 0, authentication, cloud-sync, announcement, or admin development.
 
-## Paddle Sandbox Catalog - 2026-08-12
+## Legacy Paddle Sandbox Catalog - 2026-08-12
 
-- Standard: `pri_01kzszqc8792n88p0c90jd5r8c` (USD 10/month)
-- Unlimited: `pri_01kzszytcn2m8wdsgbqeasyrbh` (USD 20/month, fair use)
+- Standard: `pri_01kzszqc8792n88p0c90jd5r8c` (legacy sandbox USD 10/month)
+- Unlimited: `pri_01kzszytcn2m8wdsgbqeasyrbh` (legacy sandbox USD 20/month, fair use)
 - Neither Paddle price includes a Paddle-managed trial. Wyth grants its own one-day cardless trial after the first successful hosted AI reply.
 - The identifiers are sandbox-only and do not authorize access; paid entitlements require a verified Paddle webhook tied to an authenticated Wyth user.
 

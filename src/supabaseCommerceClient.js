@@ -83,7 +83,7 @@ export function createSupabaseCommerceClient(options = {}) {
     return response.json().catch(() => null);
   }
 
-  async function getAccess({ userId, now = new Date().toISOString(), standardAllowanceUsd = 4 } = {}) {
+  async function getAccess({ userId, now = new Date().toISOString(), standardAllowanceUsd = 2 } = {}) {
     const user = uuid(userId, 'invalid_user_id');
     const at = isoInstant(now);
     const userFilter = `eq.${user}`;

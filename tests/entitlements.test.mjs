@@ -48,6 +48,7 @@ test('a verified active subscription grants access until its provider period end
   });
   assert.equal(access.allowed, true);
   assert.equal(access.plan, 'standard');
+  assert.equal(access.allowanceUsd, 2);
   assert.equal(access.expiresAt, '2026-09-25T10:00:00.000Z');
 
   for (const status of ['past_due', 'paused', 'canceled']) {

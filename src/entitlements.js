@@ -83,7 +83,7 @@ export function resolveCommercialAccess(input = {}) {
     };
   }
 
-  const baseAllowance = nonNegativeNumber(input.standardAllowanceUsd, 4);
+  const baseAllowance = nonNegativeNumber(input.standardAllowanceUsd, 2);
   const topUpAllowance = (Array.isArray(input.periods) ? input.periods : [])
     .filter((period) => String(period.kind || '').toLowerCase() === 'top_up')
     .filter((period) => {
