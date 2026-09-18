@@ -19,8 +19,8 @@ English Companions is designed around three ideas:
 - Independent companion chats, unread counts, and read state
 - Relationship type, personality, avatar, emotional closeness, support mode, and proactive care settings
 - Language practice settings for correction style, intensity, reply length, and natural phrase suggestions
-- DeepSeek/OpenAI-compatible chat relay through the local backend
-- Deterministic local fallback replies when no model key is configured
+- User-supplied OpenAI-compatible model URL, model name, and API key
+- Secure server relay for chat, translation, and natural-phrasing requests
 - Daily Picks based on selected content categories and providers
 - External content retrieval through a local `/api/content` endpoint with proxy support
 - Save useful Daily Picks for later
@@ -30,7 +30,7 @@ English Companions is designed around three ideas:
 - Automatic scheduled Daily Picks: the local scheduler checks each companion's push time every minute, fetches external content only for companions that are actually due, and catches up missed pushes when the app opens
 - Optional browser notifications for scheduled pushes and care check-ins (permission is requested when notifications are turned on)
 - Bounded backend memory layer for compact facts, preferences, emotional patterns, and recent events
-- Local privacy defaults: API keys stay on the Node server, and local memory data is ignored by Git
+- Local privacy defaults: model keys stay only in the current browser tab's memory and local memory data is ignored by Git
 
 ## Tech Stack
 
@@ -39,7 +39,7 @@ English Companions is designed around three ideas:
 - Node built-in test runner
 - Local browser persistence with `localStorage`
 - Bounded backend memory stored under `.local-data/`
-- DeepSeek/OpenAI-compatible API adapter
+- OpenAI-compatible BYOK adapter with SSRF and DNS-rebinding protection
 
 ## Run
 
@@ -50,28 +50,13 @@ cd "D:\Intelligent AI Agent"
 
 Open `http://127.0.0.1:5173`.
 
-`start.ps1` reads `.env.local` if it exists, then starts the local server. If no API key is configured, it prompts for a DeepSeek key for the current PowerShell session.
+`start.ps1` reads `.env.local` for account infrastructure only, then starts the server. Wyth has no operator model key and no paid plan.
 
-## Optional DeepSeek Chat
+## Bring Your Own Model
 
-Without an API key, chat uses a deterministic local fallback. To avoid typing the key every time, copy `.env.local.example` to `.env.local` and put your local values there:
+Open `Settings -> Full settings -> Account`, then enter an OpenAI-compatible HTTPS base URL, model name, API mode, and your provider key. Wyth tests the connection before using it. The key is held only in current-tab JavaScript memory: it is not placed in `localStorage`, cookies, logs, or server storage, and reload, tab close, or sign-out clears it.
 
-```powershell
-copy .env.local.example .env.local
-notepad .env.local
-.\start.ps1
-```
-
-The API key stays on the local Node server. The browser calls `/api/chat`, not DeepSeek directly.
-
-This project defaults to the DeepSeek OpenAI-compatible base URL `https://api.deepseek.com`.
-To use another compatible endpoint, set:
-
-```powershell
-$env:DEEPSEEK_BASE_URL="https://your-compatible-endpoint.example"
-```
-
-The older `OPENAI_API_KEY`, `OPENAI_MODEL`, and `OPENAI_BASE_URL` names still work for OpenAI-compatible relays.
+The browser sends each model request to Wyth's authenticated relay. The relay resolves and pins a public IPv4 destination, rejects private or reserved networks and redirects, bounds request and response sizes, limits concurrency, and never falls back to an operator key or proxy. Your selected model provider still receives the key and conversation content needed to answer, under that provider's own terms.
 
 ## Practice Languages
 
@@ -84,9 +69,7 @@ The language drives two things:
 
 ## Model Switching
 
-Use the right-side `Model` card in the app to switch between DeepSeek, OpenAI, or an OpenAI-compatible endpoint. Saving the model only updates the server runtime model config for future chat calls. Companions, role settings, local chat history, daily-push settings, and memory stay unchanged.
-
-For compatible relay services, set `LLM_API_KEY` in `.env.local`, choose `OpenAI-compatible`, and set the base URL/model shown by that service.
+Update and re-test the settings in the Account page. A failed replacement restores the last verified in-memory configuration. Companions, role settings, local chat history, Daily Pick settings, and memory remain unchanged.
 
 ## External Content Proxy
 
@@ -104,9 +87,7 @@ $env:NO_LOCAL_PROXY_FALLBACK="1"
 npm run dev
 ```
 
-Note: the proxy above only applies to external content retrieval (YouTube, news, Reddit, web search). LLM chat and translation requests go directly to the model endpoint by default, because DeepSeek and most relays are reachable without a VPN and a dead local proxy would silently break chat. If your model endpoint really needs a proxy, set `LLM_PROXY` to a proxy URL, or `LLM_USE_PROXY=1` to reuse the content proxy.
-
-If chat keeps showing "Local fallback", check the `Model` card in the app: it now shows the last LLM error message (for example a wrong model name, an invalid key, or a network failure).
+The proxy above applies only to public content retrieval. User-selected model traffic uses the hardened Wyth relay directly so a shared system proxy cannot observe model credentials or redirect them to another destination.
 
 ## Memory Design
 
@@ -135,12 +116,13 @@ styles.css            All styles
 server.mjs            Node HTTP server: static files + /api/* endpoints
 src/app.js            Frontend logic, rendering, and event wiring
 src/companionLogic.js Companion model, prompts, daily picks, scheduling
-src/chatProxy.js      /api/chat handler (LLM + local fallback)
+src/chatProxy.js      /api/chat handler
 src/translateProxy.js /api/translate handler (select-to-translate)
 src/vocabBook.js      Word book storage helpers
 src/contentAdapters.js / contentProxy.js  External content retrieval
 src/memoryStore.js / memoryProxy.js       Bounded backend memory
-src/modelConfig.js    Provider presets and model selection
+src/byok.js           Secure request-scoped model relay
+src/byokSession.js    Volatile browser credential session
 src/openaiClient.js   OpenAI-compatible / chat-completions client
 tests/*.test.mjs      Node built-in test runner suites
 ```
@@ -158,21 +140,3 @@ Released under the MIT License. See [LICENSE](LICENSE).
 - Richer companion profiles and onboarding
 - Better content ranking and source controls
 - Mobile-first polish and deployable hosting setup (PWA, then Capacitor packaging)
-# Wyth
-
-## Local preview
-
-From any PowerShell directory, run:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File "D:\Intelligent AI Agent\.worktrees\wyth-cinematic-ui\scripts\preview.ps1"
-```
-
-Keep that PowerShell window open while reviewing `http://127.0.0.1:53128/`.
-The readiness check is `http://127.0.0.1:53128/api/health`.
-
-For ordinary use, double-click `Start-Wyth.cmd`. It reuses an existing healthy
-server or starts one in the background, waits for `/api/health`, and then opens
-the site. Startup logs are stored under `.local-data/`.
-
-To enable DeepSeek, open `Settings -> Full settings -> Account -> Advanced local settings`, paste the key, and save. The key remains on the local backend only. After sending a message, the model status should show `llm`; `local_fallback` means the key, connection, or provider request needs attention.

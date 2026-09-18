@@ -1,5 +1,5 @@
 import http from 'node:http';
-import { randomUUID } from 'node:crypto';
+import { parseModelConfiguration, createByokFetch, createConcurrencyGate } from './src/byok.js';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -11,17 +11,9 @@ import { createMemoryProxyHandler } from './src/memoryProxy.js';
 import { createMemoryStore } from './src/memoryStore.js';
 import { createTranslateProxyHandler } from './src/translateProxy.js';
 import { createLanguageAssistProxyHandler } from './src/languageAssistProxy.js';
-import {
-  MODEL_PROVIDER_PRESETS,
-  apiKeyForSelection,
-  normalizeModelSelection,
-  publicModelConfig
-} from './src/modelConfig.js';
-import { createModelConfigStore } from './src/modelConfigStore.js';
-import { createNetworkFallbackFetch, createProxyFetch } from './src/nodeProxyFetch.js';
+import { createProxyFetch } from './src/nodeProxyFetch.js';
 import { createOpenAIResponsesClient } from './src/openaiClient.js';
-import { createCircuitBreaker, createInstrumentedLlmClient } from './src/llmReliability.js';
-import { createHealthPayload, createReadinessPayload, safeProxySummary } from './src/serverHealth.js';
+import { createHealthPayload, safeProxySummary } from './src/serverHealth.js';
 import { createSupabaseAuthClient, createVerifiedSessionCache, isAuthUnavailableError, resolveAuthenticatedUser } from './src/authServer.js';
 import { createAuthRouteHandler } from './src/authRoutes.js';
 import { isPublicApiPath, scopedMemoryId } from './src/apiAccess.js';
@@ -29,11 +21,6 @@ import { clientIpFromRequest, createApiUsageLimiter, isMeteredApiPath } from './
 import { assertProductionEnvironment, resolveServerHost } from './src/runtimeConfig.js';
 import { createSecurityHeaders, staticCacheControl } from './src/httpSecurity.js';
 import { safeRequestFailure } from './src/requestBoundary.js';
-import { createSupabaseCommerceClient } from './src/supabaseCommerceClient.js';
-import { createCommerceRuntime } from './src/commerceRuntime.js';
-import { createPaddleBillingClient } from './src/paddleBilling.js';
-import { createBillingRouteHandler } from './src/billingRoutes.js';
-import { publicPaddleClientConfig } from './src/paddleCheckout.js';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 try {
@@ -60,7 +47,6 @@ const outboundFetch = outboundProxy ? createProxyFetch(outboundProxy) : undefine
 const appOrigin = String(process.env.APP_ORIGIN || `http://127.0.0.1:${port}`).replace(/\/$/, '');
 const supabaseUrl = String(process.env.SUPABASE_URL || '').trim();
 const supabasePublishableKey = String(process.env.SUPABASE_PUBLISHABLE_KEY || '').trim();
-const supabaseSecretKey = String(process.env.SUPABASE_SECRET_KEY || '').trim();
 const authConfigured = Boolean(supabaseUrl && supabasePublishableKey);
 const authSessionCache = createVerifiedSessionCache();
 const authClient = authConfigured
@@ -74,173 +60,62 @@ const authRoutes = createAuthRouteHandler({
   recoverySecret: process.env.AUTH_RECOVERY_SECRET || (process.env.NODE_ENV === 'production' ? '' : 'wyth-local-development-recovery'),
   sessionCache: authSessionCache
 });
-const commerceRequired = process.env.COMMERCE_REQUIRED === '1';
-const commerceClient = authConfigured && supabaseSecretKey
-  ? createSupabaseCommerceClient({ supabaseUrl, secretKey: supabaseSecretKey, fetchImpl: outboundFetch })
-  : null;
-const commerceRuntime = createCommerceRuntime({
-  client: commerceClient,
-  required: commerceRequired,
-  standardAllowanceUsd: process.env.STANDARD_ALLOWANCE_USD,
-  pricing: {
-    inputPerMillionUsd: process.env.DEEPSEEK_INPUT_PER_MILLION_USD,
-    cachedInputPerMillionUsd: process.env.DEEPSEEK_CACHED_INPUT_PER_MILLION_USD,
-    outputPerMillionUsd: process.env.DEEPSEEK_OUTPUT_PER_MILLION_USD
-  }
-});
-const paddleApiKey = String(process.env.PADDLE_API_KEY || '').trim();
-const paddleWebhookSecret = String(process.env.PADDLE_WEBHOOK_SECRET || '').trim();
-const paddleEnvironment = String(process.env.PADDLE_ENVIRONMENT || 'sandbox').trim().toLowerCase();
-const paddleClientConfig = publicPaddleClientConfig({
-  environment: paddleEnvironment,
-  token: process.env.PADDLE_CLIENT_TOKEN
-});
-const paddlePriceIds = {
-  standard: String(process.env.PADDLE_STANDARD_PRICE_ID || '').trim(),
-  unlimited: String(process.env.PADDLE_UNLIMITED_PRICE_ID || '').trim()
-};
-const paddleBillingClient = paddleApiKey && paddleWebhookSecret && paddlePriceIds.standard && paddlePriceIds.unlimited
-  ? createPaddleBillingClient({
-      apiKey: paddleApiKey,
-      environment: paddleEnvironment,
-      checkoutUrl: `${appOrigin}/?billing=return`,
-      priceIds: paddlePriceIds,
-      fetchImpl: outboundFetch
-    })
-  : null;
-const billingRoutes = createBillingRouteHandler({
-  billingClient: paddleBillingClient,
-  commerceClient,
-  webhookSecret: paddleWebhookSecret,
-  onDiagnostic(diagnostic) {
-    console.warn(JSON.stringify({ event: 'billing_failure', ...diagnostic }));
-  }
-});
-const hostedBillingConfigured = billingRoutes.configured && Boolean(paddleClientConfig);
-if (authConfigured && process.env.NODE_ENV === 'production' && !process.env.AUTH_RECOVERY_SECRET) {
-  throw new Error('AUTH_RECOVERY_SECRET is required in production.');
-}
-// LLM traffic goes direct by default. If the operating environment rejects a
-// direct network connection, local development can retry through the already
-// trusted outbound proxy. Provider HTTP errors are never retried this way.
-const llmProxy = process.env.LLM_PROXY || (process.env.LLM_USE_PROXY === '1' ? outboundProxy : '');
-const llmFetch = llmProxy
-  ? createProxyFetch(llmProxy)
-  : createNetworkFallbackFetch({
-      primaryFetch: globalThis.fetch,
-      fallbackFetch: outboundFetch
-    });
-const environmentModelSelection = normalizeModelSelection({
-  provider: process.env.LLM_PROVIDER || 'deepseek',
-  model: process.env.LLM_MODEL || process.env.DEEPSEEK_MODEL || process.env.OPENAI_MODEL,
-  baseUrl: process.env.LLM_BASE_URL || process.env.DEEPSEEK_BASE_URL || process.env.OPENAI_BASE_URL,
-  apiMode: process.env.LLM_API_MODE
-});
 const memoryStore = createMemoryStore(process.env.MEMORY_STORE_PATH || path.join(root, '.local-data', 'memory.json'));
-const runtimeStatus = {
-  startedAt: new Date().toISOString(),
-  lastChatSource: null,
-  lastChatAt: null,
-  lastLlmDiagnostic: null
-};
-const chatCircuit = createCircuitBreaker();
-const contentProxy = createContentProxyHandler({
-  fetchImpl: outboundFetch
-});
-function createRuntimeLlmClient(overrides = {}) {
-  const requestId = randomUUID();
-  if (overrides.request) overrides.request.llmRequestId = requestId;
-  const client = createOpenAIResponsesClient({
-    apiKey: apiKeyForSelection(modelSelection, process.env, storedModelConfig.apiKeys),
-    model: modelSelection.model,
-    baseUrl: modelSelection.baseUrl,
-    apiMode: modelSelection.apiMode,
-    temperature: overrides.temperature,
-    maxOutputTokens: overrides.maxOutputTokens,
-    fetchImpl: llmFetch,
-    onUsage(usage) {
-      if (overrides.request) overrides.request.providerUsage = usage;
-    }
-  });
-  if (!client || overrides.operation !== 'chat') return client;
-  return createInstrumentedLlmClient({
-    client,
-    circuit: chatCircuit,
-    model: modelSelection.model,
-    createRequestId: () => requestId,
-    onDiagnostic(diagnostic) {
-      runtimeStatus.lastLlmDiagnostic = diagnostic;
-      console.warn(JSON.stringify({ event: 'llm_failure', ...diagnostic }));
-    }
-  });
-}
-const chatProxy = createChatProxyHandler({
-  memoryStore,
-  memoryKeyProvider: (request, companionId) => authConfigured
-    ? scopedMemoryId(request.authenticatedUser?.id, companionId)
-    : companionId,
-  allowLocalFallback: process.env.ALLOW_LOCAL_FALLBACK === '1',
-  // DeepSeek recommends a higher temperature for conversational use; this
-  // keeps companion replies varied and human instead of template-flat.
-  llmClientProvider: (request) => createRuntimeLlmClient({
-    operation: 'chat', temperature: 1.1, maxOutputTokens: 500, request
-  }),
-  onMemoryError(error) {
-    console.warn(`Memory update failed; continuing chat without backend memory: ${error.message}`);
-  },
-  onLlmError(error) {
-    if (!runtimeStatus.lastLlmDiagnostic?.requestId && error.requestId) {
-      runtimeStatus.lastLlmDiagnostic = { requestId: error.requestId, category: 'unknown' };
-    }
-  }
-});
-const memoryProxy = createMemoryProxyHandler({
-  memoryStore
-});
-const translateProxy = createTranslateProxyHandler({
-  // Translation wants deterministic dictionary-style output, not creativity.
-  llmClientProvider: () => createRuntimeLlmClient({ temperature: 0.2, maxOutputTokens: 400 }),
-  onLlmError(error) {
-    console.warn(`Translate LLM request failed: ${String(error.code || error.name || 'unknown')}`);
-  }
-});
-const modelConfigStore = createModelConfigStore(process.env.MODEL_CONFIG_PATH || path.join(root, '.local-data', 'model.json'));
-let storedModelConfig = await modelConfigStore.load();
-let modelSelection = storedModelConfig.selection || environmentModelSelection;
-const languageAssistProxy = createLanguageAssistProxyHandler({
-  llmClientProvider: () => createRuntimeLlmClient({ temperature: 0.35, maxOutputTokens: 240 }),
-  onLlmError(error) {
-    console.warn(`Language assist LLM request failed: ${String(error.code || error.name || 'unknown')}`);
-  }
-});
+const startedAt = new Date().toISOString();
+const acquire = createConcurrencyGate();
+const modelPaths = new Set(['/api/chat', '/api/translate', '/api/language-assist', '/api/model/test']);
+const contentProxy = createContentProxyHandler({ fetchImpl: outboundFetch });
+const memoryProxy = createMemoryProxyHandler({ memoryStore });
 
-function modelOptionsForClient() {
-  return Object.fromEntries(
-    Object.entries(MODEL_PROVIDER_PRESETS).map(([provider, preset]) => [
-      provider,
-      {
-        label: preset.label,
-        defaultModel: preset.defaultModel,
-        baseUrl: preset.baseUrl,
-        apiMode: preset.apiMode,
-        keyEnv: preset.keyEnv
-      }
-    ])
-  );
-}
-
-function runtimeLlmStatus() {
-  return {
-    ...publicModelConfig(modelSelection, process.env, storedModelConfig.apiKeys),
-    lastChatSource: runtimeStatus.lastChatSource,
-    lastChatAt: runtimeStatus.lastChatAt,
-    lastLlmDiagnostic: runtimeStatus.lastLlmDiagnostic,
-    circuit: chatCircuit.snapshot().state
-  };
-}
-
-function runtimeLlmConfigured() {
-  return Boolean(apiKeyForSelection(modelSelection, process.env, storedModelConfig.apiKeys));
+async function handleModelRequest(request, response, userId) {
+  if (request.method !== 'POST') { sendJson(response, { error: 'method_not_allowed' }, 405); return; }
+  let config;
+  try { config = parseModelConfiguration(request.headers['x-wyth-model']); }
+  catch { sendJson(response, { error: 'model_configuration_required' }, 400); return; }
+  const release = acquire(userId);
+  if (!release) { sendJson(response, { error: 'too_many_requests', retryable: true }, 429); return; }
+  const controller = new AbortController();
+  const disconnected = () => { if (!response.writableEnded) controller.abort(); };
+  response.on('close', disconnected);
+  const deadline = AbortSignal.any([controller.signal, AbortSignal.timeout(45000)]);
+  try {
+    const proxyRequest = await proxyRequestFromNode(request);
+    const pathname = new URL(request.url, appOrigin).pathname;
+    const secureFetch = createByokFetch(config);
+    const client = createOpenAIResponsesClient({
+      ...config, allowEnvironment: false, maxAttempts: 2, requestTimeoutMs: 20000,
+      temperature: pathname === '/api/chat' ? 1.1 : pathname === '/api/translate' ? 0.2 : 0.35,
+      maxOutputTokens: pathname === '/api/chat' ? 500 : pathname === '/api/translate' ? 400 : 240,
+      fetchImpl: (url, options) => secureFetch(url, { ...options, signal: AbortSignal.any([deadline, options.signal || deadline]) })
+    });
+    if (pathname === '/api/model/test') {
+      const output = await client([{ role: 'user', content: 'Reply with OK.' }]);
+      if (!String(output || '').trim()) throw new Error('invalid_model_response');
+      sendJson(response, { ok: true }); return;
+    }
+    const llmClientProvider = () => client;
+    const handler = pathname === '/api/chat'
+      ? createChatProxyHandler({
+          llmClientProvider,
+          allowLocalFallback: false,
+          memoryStore,
+          memoryKeyProvider: (_request, companionId) => authConfigured
+            ? scopedMemoryId(userId, companionId)
+            : companionId,
+          onMemoryError() {
+            // A memory write failure must not turn a valid model reply into a failed chat.
+          }
+        })
+      : pathname === '/api/translate'
+        ? createTranslateProxyHandler({ llmClientProvider, strict: true })
+        : createLanguageAssistProxyHandler({ llmClientProvider, strict: true });
+    await sendJsonProxyResponse(response, await handler(proxyRequest));
+  } catch (error) {
+    if (!response.destroyed) sendJson(response, { error: error?.status === 413 ? 'request_too_large' : 'model_unavailable', retryable: true }, error?.status === 413 ? 413 : 503);
+  } finally {
+    response.off('close', disconnected);
+    release();
+  }
 }
 
 const mimeTypes = {
@@ -256,6 +131,13 @@ const mimeTypes = {
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg'
 };
+const publicSourceFiles = new Set([
+  'accountStorage.js', 'app.js', 'authBrowser.js', 'authDeadline.js', 'avatarImage.js',
+  'byokSession.js', 'chatTime.js', 'chatUiState.js', 'companionLogic.js', 'contentAdapters.js',
+  'creationFlowState.js', 'emotionSupport.js', 'interfaceUiState.js', 'notificationPreferences.js',
+  'onboardingState.js', 'sceneCatalog.js', 'scenePresentation.js', 'settingsState.js', 'vocabBook.js',
+  'wythI18n.js', 'wythUiState.js'
+]);
 
 async function readBody(request) {
   const chunks = [];
@@ -283,14 +165,7 @@ async function proxyRequestFromNode(request) {
 }
 
 async function sendJsonProxyResponse(response, proxyResponse) {
-  const body = await proxyResponse.text();
-  const proxyHeaders = Object.fromEntries(proxyResponse.headers.entries());
-  response.writeHead(proxyResponse.status, {
-    ...proxyHeaders,
-    ...responseSecurityHeaders,
-    'cache-control': 'no-store'
-  });
-  response.end(body);
+  sendJson(response, await proxyResponse.json(), proxyResponse.status);
 }
 
 function sendJson(response, body, status = 200) {
@@ -319,9 +194,14 @@ async function serveStatic(request, response) {
   const url = new URL(request.url, `http://${request.headers.host}`);
   const requestedPath = url.pathname === '/' ? '/index.html' : decodeURIComponent(url.pathname);
   const filePath = path.resolve(root, `.${requestedPath}`);
-  if (!filePath.startsWith(root)) {
-    response.writeHead(403, responseSecurityHeaders);
-    response.end('Forbidden');
+  const publicPath = /^\/(?:index|privacy|terms|refund|support|pricing)\.html$/.test(requestedPath)
+    || /^\/(?:styles|legal)\.css$/.test(requestedPath)
+    || (requestedPath.startsWith('/src/') && publicSourceFiles.has(requestedPath.slice(5)))
+    || /^\/assets\/[a-zA-Z0-9_/. -]+$/.test(requestedPath);
+  if (!publicPath || requestedPath.split('/').some((part) => part.startsWith('.'))
+      || !filePath.startsWith(root + path.sep) || !mimeTypes[path.extname(filePath)]) {
+    response.writeHead(404, responseSecurityHeaders);
+    response.end('Not found');
     return;
   }
 
@@ -360,7 +240,6 @@ async function handleRequest(request, response) {
     return;
   }
   let authenticatedUser = null;
-  let commercialAccess = null;
   if (authConfigured && requestUrl.pathname.startsWith('/api/') && !isPublicApiPath(requestUrl.pathname)) {
     if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method) && request.headers.origin !== appOrigin) {
       sendJson(response, { error: 'invalid_origin' }, 403);
@@ -386,26 +265,9 @@ async function handleRequest(request, response) {
       return;
     }
   }
-  if (authConfigured && authenticatedUser && isMeteredApiPath(requestUrl.pathname)) {
-    try {
-      commercialAccess = await commerceRuntime.checkAccess(authenticatedUser.id);
-    } catch {
-      sendJson(response, { error: 'commerce_unavailable', retryable: true }, 503);
-      return;
-    }
-    if (!commercialAccess.allowed) {
-      const unavailable = commercialAccess.reason === 'commerce_unavailable';
-      sendJson(response, {
-        error: commercialAccess.reason,
-        retryable: unavailable,
-        plan: commercialAccess.plan
-      }, unavailable ? 503 : 402);
-      return;
-    }
-  }
-  if (authConfigured && authenticatedUser && isMeteredApiPath(requestUrl.pathname)) {
+  if (isMeteredApiPath(requestUrl.pathname) || modelPaths.has(requestUrl.pathname)) {
     const usage = apiUsageLimiter.consume({
-      userId: authenticatedUser.id,
+      userId: authenticatedUser?.id || clientIpFromRequest(request, { trustProxy }),
       ip: clientIpFromRequest(request, { trustProxy })
     });
     if (!usage.allowed) {
@@ -417,91 +279,24 @@ async function handleRequest(request, response) {
       return;
     }
   }
-  if (requestUrl.pathname === '/api/billing/paddle/webhook') {
-    if (request.method !== 'POST') {
-      sendJson(response, { error: 'method_not_allowed' }, 405);
-      return;
-    }
-    const result = await billingRoutes.webhook({
-      rawBody: await readBody(request),
-      signatureHeader: request.headers['paddle-signature']
-    });
-    sendJson(response, result.body, result.status);
+  if (modelPaths.has(requestUrl.pathname)) {
+    await handleModelRequest(request, response, authenticatedUser?.id || clientIpFromRequest(request, { trustProxy }));
     return;
   }
-  if (requestUrl.pathname === '/api/billing/checkout') {
-    if (request.method !== 'POST') {
-      sendJson(response, { error: 'method_not_allowed' }, 405);
-      return;
-    }
-    const body = await (await proxyRequestFromNode(request)).json();
-    const result = await billingRoutes.checkout({ authenticatedUser, body });
-    sendJson(response, result.body, result.status);
+  if (requestUrl.pathname.startsWith('/api/billing/') || requestUrl.pathname.startsWith('/api/commerce/') || requestUrl.pathname === '/api/model') {
+    sendJson(response, { error: 'feature_removed', mode: 'free_byok' }, 410);
     return;
   }
   if (request.url === '/api/health' && request.method === 'GET') {
-    sendJson(response, createHealthPayload({ startedAt: runtimeStatus.startedAt, port, processId: process.pid }));
+    sendJson(response, createHealthPayload({ startedAt: startedAt, port, processId: process.pid }));
     return;
   }
   if (request.url === '/api/health/ready' && request.method === 'GET') {
-    const readiness = createReadinessPayload({
-      configured: runtimeLlmConfigured(),
-      circuit: chatCircuit.snapshot(),
-      provider: modelSelection.provider,
-      model: modelSelection.model,
-      startedAt: runtimeStatus.startedAt,
-      port,
-      processId: process.pid
-    });
-    sendJson(response, readiness.body, readiness.status);
+    sendJson(response, { ...createHealthPayload({ startedAt, port, processId: process.pid }), ready: true, mode: 'free_byok', llm: { mode: 'byok', configured: false, userConfigurationRequired: true } });
     return;
   }
-  if (request.url?.startsWith('/api/status')) {
-    sendJson(response, {
-      app: 'English Companions',
-      startedAt: runtimeStatus.startedAt,
-      llm: runtimeLlmStatus(),
-      modelOptions: modelOptionsForClient(),
-      content: {
-        outboundProxy: safeProxySummary(outboundProxy),
-        proxyFallback: Boolean(localProxyFallback)
-      },
-      memory: {
-        mode: 'bounded-local-json',
-        maxStore: 'per companion profile is capped by memoryStore limits',
-        path: process.env.MEMORY_STORE_PATH ? 'custom' : '.local-data/memory.json'
-      },
-      commerce: {
-        configured: Boolean(commerceClient),
-        required: commerceRequired,
-        billingConfigured: hostedBillingConfigured
-      }
-    });
-    return;
-  }
-  if (request.url?.startsWith('/api/model')) {
-    if (process.env.ALLOW_MODEL_CONFIG_ENDPOINT !== '1') {
-      sendJson(response, { error: 'not_found' }, 404);
-      return;
-    }
-    if (request.method !== 'POST') {
-      sendJson(response, { error: 'Model endpoint expects POST requests.' }, 405);
-      return;
-    }
-    try {
-      const body = await (await proxyRequestFromNode(request)).json();
-      storedModelConfig = await modelConfigStore.save({ selection: body, apiKey: body.apiKey });
-      modelSelection = storedModelConfig.selection;
-      runtimeStatus.lastChatSource = null;
-      runtimeStatus.lastChatAt = null;
-      runtimeStatus.lastLlmDiagnostic = null;
-      sendJson(response, {
-        llm: runtimeLlmStatus(),
-        modelOptions: modelOptionsForClient()
-      });
-    } catch (error) {
-      sendJson(response, { error: error.message }, 400);
-    }
+  if (requestUrl.pathname === '/api/status') {
+    sendJson(response, { app: 'Wyth', startedAt, mode: 'free_byok', llm: { mode: 'byok', configured: false } });
     return;
   }
   if (request.url?.startsWith('/api/memory/')) {
@@ -512,67 +307,8 @@ async function handleRequest(request, response) {
     await sendJsonProxyResponse(response, proxyResponse);
     return;
   }
-  if (requestUrl.pathname === '/api/translate') {
-    const proxyResponse = await translateProxy(await proxyRequestFromNode(request));
-    await sendJsonProxyResponse(response, proxyResponse);
-    return;
-  }
-  if (requestUrl.pathname === '/api/commerce/status' && request.method === 'GET') {
-    try {
-      const access = await commerceRuntime.checkAccess(authenticatedUser.id);
-      sendJson(response, {
-        configured: Boolean(commerceClient),
-        billingConfigured: hostedBillingConfigured,
-        paddle: paddleClientConfig,
-        required: commerceRequired,
-        access
-      });
-    } catch {
-      sendJson(response, { error: 'commerce_unavailable', retryable: true }, 503);
-    }
-    return;
-  }
-  if (requestUrl.pathname === '/api/language-assist') {
-    const proxyResponse = await languageAssistProxy(await proxyRequestFromNode(request));
-    await sendJsonProxyResponse(response, proxyResponse);
-    return;
-  }
   if (requestUrl.pathname === '/api/content') {
     const proxyResponse = await contentProxy(await proxyRequestFromNode(request));
-    await sendJsonProxyResponse(response, proxyResponse);
-    return;
-  }
-  if (requestUrl.pathname === '/api/chat') {
-    const proxyRequest = await proxyRequestFromNode(request);
-    proxyRequest.authenticatedUser = authenticatedUser;
-    proxyRequest.commercialAccess = commercialAccess;
-    const proxyResponse = await chatProxy(proxyRequest);
-    try {
-      const body = await proxyResponse.json();
-      runtimeStatus.lastChatSource = body.source || null;
-      runtimeStatus.lastChatAt = new Date().toISOString();
-      if (body.source === 'llm') runtimeStatus.lastLlmDiagnostic = null;
-      if (body.source === 'llm' && commerceClient) {
-        try {
-          await commerceRuntime.recordSuccessfulUse({
-            userId: authenticatedUser.id,
-            access: commercialAccess,
-            requestId: proxyRequest.llmRequestId,
-            operation: 'chat',
-            provider: modelSelection.provider,
-            model: modelSelection.model,
-            usage: proxyRequest.providerUsage
-          });
-        } catch {
-          sendJson(response, { error: 'commerce_unavailable', retryable: true }, 503);
-          return;
-        }
-      }
-      sendJson(response, body, proxyResponse.status);
-      return;
-    } catch {
-      // Fall back to the generic proxy sender if a future handler returns non-JSON.
-    }
     await sendJsonProxyResponse(response, proxyResponse);
     return;
   }
@@ -583,7 +319,7 @@ async function handleRequest(request, response) {
   await serveStatic(request, response);
 }
 
-const server = http.createServer((request, response) => {
+const server = http.createServer({ requestTimeout: 30000, headersTimeout: 15000 }, (request, response) => {
   handleRequest(request, response).catch((error) => {
     const failure = safeRequestFailure(error);
     console.error(JSON.stringify({ event: 'request_failure', status: failure.status }));
@@ -598,14 +334,8 @@ const server = http.createServer((request, response) => {
 server.listen(port, host, () => {
   console.log(`Wyth listening on ${host}:${port}; public origin ${appOrigin}`);
   const outboundProxySummary = safeProxySummary(outboundProxy);
-  const llmProxySummary = safeProxySummary(llmProxy);
   console.log(outboundProxySummary.configured
     ? `External content proxy configured: ${outboundProxySummary.endpoint}`
     : 'External content requests are using direct network access.');
-  console.log(llmProxySummary.configured
-    ? `LLM requests use proxy: ${llmProxySummary.endpoint}`
-    : 'LLM requests use direct network access.');
-  console.log(createRuntimeLlmClient()
-    ? `Chat LLM configured with model: ${modelSelection.model}`
-    : 'Chat LLM is not configured; using local fallback replies.');
+  console.log('Free BYOK mode: no platform model credentials or payments.');
 });

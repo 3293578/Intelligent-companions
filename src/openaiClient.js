@@ -143,8 +143,9 @@ export function resolveLlmConfig(env = process.env, options = {}) {
 }
 
 export function createOpenAIResponsesClient(options = {}) {
-  const apiKey = options.apiKey || process.env.DEEPSEEK_API_KEY || process.env.OPENAI_API_KEY || '';
-  const { model, baseUrl, apiMode } = resolveLlmConfig(process.env, options);
+  const env = options.allowEnvironment === false ? {} : process.env;
+  const apiKey = options.apiKey || env.DEEPSEEK_API_KEY || env.OPENAI_API_KEY || '';
+  const { model, baseUrl, apiMode } = resolveLlmConfig(env, options);
   const responsesUrl = buildResponsesUrl(baseUrl);
   const chatCompletionsUrl = buildChatCompletionsUrl(baseUrl);
   const fetchImpl = options.fetchImpl || globalThis.fetch;

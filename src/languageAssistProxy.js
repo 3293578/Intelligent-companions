@@ -66,6 +66,7 @@ export function createLanguageAssistProxyHandler(options = {}) {
           options.onLlmError?.(error);
         }
       }
+      if (options.strict) return response({ error: 'model_unavailable', retryable: true }, 503);
       return response({ source: 'local_fallback', result: { naturalAlternative: parsed.text, note: 'Natural phrasing is unavailable until a model is configured.' } });
     } catch (error) {
       return response({ error: error.message }, 400);

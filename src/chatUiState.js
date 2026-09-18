@@ -22,6 +22,7 @@ export function completeChatSend(chatUiState, companionId, error = '') {
 }
 
 export function chatFailureMessageKey(errorCode) {
+  if (errorCode === 'model_configuration_required') return 'error.modelConfigurationRequired';
   if (errorCode === 'auth_unavailable') return 'error.chatAuthUnavailable';
   if (errorCode === 'authentication_required' || errorCode === 'email_not_verified') {
     return 'error.chatAuthenticationRequired';

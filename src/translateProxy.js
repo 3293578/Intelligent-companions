@@ -83,7 +83,7 @@ export function createLocalTranslationFallback(text) {
   return {
     translation: '',
     pronunciation: '',
-    explanation: `暂时无法翻译“${text}”。请在右侧 Model 卡片配置可用的模型 API key（如 DEEPSEEK_API_KEY）后重试。`,
+    explanation: `暂时无法翻译“${text}”。请在账号页配置并验证你自己的模型接口、模型名和 API 密钥后重试。`,
     examples: []
   };
 }
@@ -135,6 +135,7 @@ export function createTranslateProxyHandler(options = {}) {
         }
       }
 
+      if (options.strict) return jsonResponse({ error: 'model_unavailable', retryable: true }, 503);
       return jsonResponse({
         source: 'local_fallback',
         text: parsed.text,

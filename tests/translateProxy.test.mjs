@@ -107,7 +107,7 @@ test('translate proxy handler falls back locally when no client is configured', 
   assert.equal(response.status, 200);
   assert.equal(body.source, 'local_fallback');
   assert.equal(body.result.translation, '');
-  assert.match(body.result.explanation, /API key/);
+  assert.match(body.result.explanation, /API 密钥/);
 });
 
 test('translate proxy handler falls back when the LLM client throws', async () => {
@@ -127,6 +127,13 @@ test('translate proxy handler falls back when the LLM client throws', async () =
 
   assert.equal(body.source, 'local_fallback');
   assert.deepEqual(errors, ['model offline']);
+});
+
+test('production BYOK translation fails explicitly instead of inventing a local result', async () => {
+  const handler = createTranslateProxyHandler({ strict: true, llmClient: async () => { throw new Error('offline'); } });
+  const response = await handler({ method: 'POST', json: async () => ({ text: 'serendipity' }) });
+  assert.equal(response.status, 503);
+  assert.deepEqual(await response.json(), { error: 'model_unavailable', retryable: true });
 });
 
 test('translate proxy handler resolves a fresh client from the provider', async () => {

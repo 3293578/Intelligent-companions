@@ -6,6 +6,7 @@ const css = readFileSync(new URL('../styles.css', import.meta.url), 'utf8');
 const appJs = readFileSync(new URL('../src/app.js', import.meta.url), 'utf8');
 const serverJs = readFileSync(new URL('../server.mjs', import.meta.url), 'utf8');
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+const accountSettings = appJs.slice(appJs.indexOf('function renderAccountSettings'), appJs.indexOf('function renderAuthForm'));
 
 function declarationsFor(selector) {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -170,11 +171,12 @@ test('quick settings contain only frequent controls and link to a five-section f
   assert.doesNotMatch(appJs, /function renderQuickSettings[\s\S]*data-model-form[\s\S]*function renderFullSettings/);
 });
 
-test('public account settings announce managed DeepSeek and do not expose model switching', () => {
-  assert.match(appJs, /announcement\.modelSwitchTitle/);
-  assert.match(appJs, /announcement\.modelSwitchBody/);
-  assert.doesNotMatch(appJs, /<details class="advanced-local-setup">/);
-  assert.doesNotMatch(appJs, /renderAccountSettings[\s\S]*?data-model-form[\s\S]*?function renderCompanionshipSettings/);
+test('account settings expose free user-supplied model configuration', () => {
+  assert.match(accountSettings, /renderModelSettings\(\)/);
+  assert.match(appJs, /data-model-form/);
+  assert.match(appJs, /name="baseUrl"/);
+  assert.match(appJs, /name="apiKey"/);
+  assert.doesNotMatch(accountSettings, /renderBillingSettings\(\)/);
   assert.match(appJs, /status\.accountSyncComingSoon/);
 });
 
@@ -196,7 +198,7 @@ test('account outages can recover without exposing the protected diagnostics end
   assert.match(appJs, /data-action="auth-retry"/);
   assert.match(appJs, /window\.addEventListener\('online'/);
   assert.match(appJs, /retryAuthConnection\(\{ focusFeedback: false \}\)/);
-  assert.match(appJs, /fetch\('\/api\/health\/ready'\)/);
+  assert.match(appJs, /fetch\('\/api\/health\/ready'/);
   assert.doesNotMatch(appJs, /fetch\('\/api\/status'\)/);
 });
 
@@ -295,9 +297,10 @@ test('model settings accept a password key without exposing it in rendered statu
   assert.doesNotMatch(appJs, /value="\$\{[^}]*apiKey/);
 });
 
-test('server defaults to DeepSeek even when another provider key exists in the environment', () => {
-  assert.match(serverJs, /provider:\s*process\.env\.LLM_PROVIDER\s*\|\|\s*'deepseek'/);
-  assert.doesNotMatch(serverJs, /OPENAI_API_KEY\s*&&\s*!process\.env\.DEEPSEEK_API_KEY/);
+test('server requires request-scoped model credentials without provider defaults', () => {
+  assert.match(serverJs, /parseModelConfiguration\(request\.headers\['x-wyth-model'\]\)/);
+  assert.match(serverJs, /allowEnvironment:\s*false/);
+  assert.doesNotMatch(serverJs, /process\.env\.(?:DEEPSEEK|OPENAI)_API_KEY/);
 });
 
 test('creation and profile dialogs keep every native control readable in the dark surface', () => {

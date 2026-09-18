@@ -13,8 +13,7 @@
 | 发验证/重置邮件 | Resend | 配置较少，适合先做测试邮件 | 在上线账户功能前 |
 | 错误与故障监控 | Sentry | 能看到生产报错而不读取用户聊天内容 | 在 staging 部署后 |
 | 域名与代码部署 | GitHub + 域名注册商 | GitHub 用于审查/自动部署；域名用于正式访问与邮件验证 | GitHub 先行，域名稍后 |
-| 全球订阅与税务 | Paddle | 若个人/个体申请获批，可作为 Merchant of Record | 公测站与政策页齐备后申请 |
-| 收款备选 | PayPal 中国个人卖家 | Paddle 审核未通过或较慢时的备选路径 | 与 Paddle 并行准备，不先接代码 |
+| 用户自备模型 | 任意兼容 OpenAI 的服务商 | Wyth 不提供或转售模型，用户自行承担提供商费用 | 在账号页临时配置 |
 
 腾讯云、阿里云账户暂时保留即可。它们更适合以后单独做中国大陆部署；国际首发先避免自己购买、维护 VPS。
 
@@ -22,10 +21,10 @@
 
 | 环境 | 用途 | 可使用的数据 | 禁止事项 |
 | --- | --- | --- | --- |
-| staging（测试） | 开发、内部验收、支付沙盒、功能试用 | 测试账号、测试数据、测试付款产品 | 不导入真实客户、不要使用生产密钥 |
-| production（正式） | 对外运营 | 真实用户与正式支付 | 不直接修改、不用测试密钥 |
+| staging（测试） | 开发、内部验收、功能试用 | 测试账号、测试数据、测试模型密钥 | 不导入真实客户、不要使用生产账号 |
+| production（正式） | 对外运营 | 真实用户 | 不直接修改、不使用平台模型密钥 |
 
-规则：每个服务都单独创建 `Wyth Staging` 与 `Wyth Production`。数据库、付款产品、邮件发送域名、监控项目、环境变量都要分开。先在 staging 验证，再部署 production；出问题可回滚到上一版本。
+规则：每个服务都单独创建 `Wyth Staging` 与 `Wyth Production`。数据库、邮件发送域名、监控项目、环境变量都要分开。先在 staging 验证，再部署 production；出问题可回滚到上一版本。
 
 ## 3. 账号开通顺序
 
@@ -33,9 +32,8 @@
 2. 创建 Supabase 账号，先建立一个 staging 项目。
 3. 创建 Render 账号并连接 GitHub；使用 `render.yaml` 的 Render Blueprint 部署 staging。Render 当前要求银行卡验证时，必须使用本人真实、受支持且已开通境外线上支付的卡。
 4. 创建 Sentry 与 Resend 测试项目。
-5. 等 staging 有公开 HTTPS 地址、价格页、隐私政策、服务条款和退款/取消政策后，再申请 Paddle。
-6. 同期自行注册 PayPal 中国个人卖家，完成平台要求的身份与收款验证；审批能力以其后台实际显示为准。
-7. 购买域名，配置 production 后再创建 production 的 Supabase/Render/邮件/监控项目。
+5. 等 staging 有公开 HTTPS 地址、隐私政策和服务条款后，完成 BYOK 代理与账号安全测试。
+6. 购买域名，配置 production 后再创建 production 的 Supabase/Render/邮件/监控项目。
 
 ## 4. 第一步：创建 Supabase staging 项目
 
@@ -55,18 +53,17 @@
 1. 完成 Render 银行卡验证。不得使用虚假地址或借用身份；银行卡号、CVV 和验证码不进入聊天、截图或 Git。
 2. 在 Render 选择 `New -> Blueprint`，连接 GitHub 仓库，并选择 `codex/wyth-cinematic-ui` 分支。
 3. Render 从仓库根目录读取 `render.yaml`。确认服务名为 `wyth-staging`，运行时为 Node，健康检查为 `/api/health`。
-4. 只在 Render 的 Environment/Secrets 页面填写 `APP_ORIGIN`、`SUPABASE_URL`、`SUPABASE_PUBLISHABLE_KEY`、`AUTH_RECOVERY_SECRET`、`DEEPSEEK_API_KEY`；不要把值发到聊天里。
+4. 只在 Render 的 Environment/Secrets 页面填写 `APP_ORIGIN`、`SUPABASE_URL`、`SUPABASE_PUBLISHABLE_KEY`、`AUTH_RECOVERY_SECRET`；不要放置平台模型密钥，也不要把值发到聊天里。
 5. 首次部署使用 Render 分配的 HTTPS 地址作为 `APP_ORIGIN`。部署成功并完成冒烟测试后，再绑定 `staging.thewyth.com` 并同步更新 Render、Supabase 的允许 URL。
-6. 依次验证 `/api/health`、`/api/health/ready`、邮箱注册确认、登录、一次真实 DeepSeek 对话和退出登录。任何一步失败都先保留日志，不开放公开注册。
-7. staging 通过后再建立独立 production 服务；不得复用 staging 的 Supabase 项目、密钥或 Paddle 沙盒产品。
+6. 依次验证 `/api/health`、`/api/health/ready`、邮箱注册确认、登录、使用测试提供商密钥完成一次真实 BYOK 对话、刷新后密钥被清除，以及退出登录。任何一步失败都先保留日志，不开放公开注册。
+7. staging 通过后再建立独立 production 服务；不得复用 staging 的 Supabase 项目或密钥。
 
 ### Production Blueprint（仅在 staging 全部通过后）
 
 1. 新建独立 Render Blueprint，并将 Blueprint Path 指向 `render.production.yaml`；不要修改现有 `wyth-staging`。
 2. 该文件创建 `wyth-production`，使用不会因空闲休眠的 Starter 实例，并关闭自动部署。正式发布必须先通过测试，再由人工触发部署。
-3. production 必须使用独立 Supabase 项目、Paddle live API key/client token/webhook secret/live price IDs 和 DeepSeek 密钥。任何 sandbox ID 都不能复制到 production。
-4. 首次创建时先不要开放注册。完成 `thewyth.com` / `www.thewyth.com` DNS、Supabase 回调、Paddle live 域名审批、邮件域名和政策页后，再执行生产冒烟测试。
-5. `COMMERCE_REQUIRED=1` 会让服务在生产支付配置缺失、令牌环境不匹配或价格 ID 无效时拒绝启动，避免免费放行或混用沙盒账单。
+3. production 必须使用独立 Supabase 项目和认证恢复密钥；不配置 Paddle、PayPal 或平台模型密钥。
+4. 首次创建时先不要开放注册。完成 `thewyth.com` / `www.thewyth.com` DNS、Supabase 回调、邮件域名和政策页后，再执行生产冒烟测试。
 
 银行卡验证尚未完成时可以继续本地测试和文档准备，但不能完成 Render 上的真实部署、Paddle webhook、正式回调 URL 或 Cloudflare 自定义域名验证。
 
@@ -74,8 +71,7 @@
 
 - 在每一个供应商后台打开账单邮件通知；分别给 staging 和 production 设置预算。
 - 前期只允许 staging 支出；production 没有完成回滚、监控和付款沙盒验证前不开放用户注册。
-- 每月检查 DeepSeek 用量、Render 运行时、Supabase 数据库/存储、邮件发送量和错误率。
-- USD 10 "Unlimited" 在产品文案和服务条款中必须说明为合理人类使用，保留防自动化与紧急成本保护。
+- 每月检查 Render 运行时、Supabase 数据库/存储、邮件发送量和错误率。用户模型费用由用户与其提供商直接结算。
 
 ## 7. 上线前不可跳过的项目
 
@@ -83,7 +79,7 @@
 - 隐私政策、服务条款、退款/取消政策、AI 陪伴披露、未成年人非恋爱陪伴政策、推荐奖励规则。
 - 聊天、角色和记忆仍在用户本机；注册前和公告内都要明确提醒，且先完成本地加密导出/导入。
 - 生产数据库备份、恢复演练、管理员 MFA、最小权限角色、操作审计和撤销员工/协作者权限的流程。
-- 支付必须通过获批的 Paddle 或 PayPal 真实账户；不得借用他人身份、伪造海外地址或使用虚假主体。
+- BYOK 请求必须保持登录校验、来源校验、限流、并发控制、超时、响应大小限制和内网访问保护。
 
 ## 8. 万一泄露或丢失访问权
 

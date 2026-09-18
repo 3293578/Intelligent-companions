@@ -1,5 +1,7 @@
 # Wyth Paddle Sandbox Catalog
 
+> Archived on September 18, 2026. Wyth no longer accepts payments and these identifiers are not used by the application or deployment. This record is retained only for historical audit context.
+
 This file records non-secret Paddle sandbox catalog identifiers. It must not
 contain API keys, client-side tokens, webhook secrets, customer IDs, payment
 details, or personal account information.

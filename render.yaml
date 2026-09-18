@@ -13,39 +13,11 @@ services:
         value: production
       - key: NO_LOCAL_PROXY_FALLBACK
         value: "1"
-      - key: ALLOW_LOCAL_FALLBACK
-        value: "0"
-      - key: ALLOW_MODEL_CONFIG_ENDPOINT
-        value: "0"
-      - key: LLM_PROVIDER
-        value: deepseek
-      - key: LLM_MODEL
-        value: deepseek-v4-flash
-      - key: COMMERCE_REQUIRED
-        value: "0"
-      - key: STANDARD_ALLOWANCE_USD
-        value: "2"
       - key: APP_ORIGIN
         value: https://staging.thewyth.com
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_PUBLISHABLE_KEY
         sync: false
-      - key: SUPABASE_SECRET_KEY
-        sync: false
       - key: AUTH_RECOVERY_SECRET
         generateValue: true
-      - key: DEEPSEEK_API_KEY
-        sync: false
-      - key: PADDLE_ENVIRONMENT
-        value: sandbox
-      - key: PADDLE_STANDARD_PRICE_ID
-        value: pri_01kzszqc8792n88p0c90jd5r8c
-      - key: PADDLE_UNLIMITED_PRICE_ID
-        value: pri_01kzszytcn2m8wdsgbqeasyrbh
-      - key: PADDLE_API_KEY
-        sync: false
-      - key: PADDLE_CLIENT_TOKEN
-        sync: false
-      - key: PADDLE_WEBHOOK_SECRET
-        sync: false

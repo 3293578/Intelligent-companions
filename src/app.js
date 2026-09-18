@@ -112,7 +112,7 @@ import {
   readRememberedLocalOwner,
   rememberLocalOwner
 } from './accountStorage.js';
-import { createPaddleCheckoutLauncher } from './paddleCheckout.js';
+import { createByokSession } from './byokSession.js';
 
 const STORAGE_KEY = 'english-companions-state-v1';
 const MOTION_KEY = 'wyth-reduce-motion';
@@ -121,8 +121,7 @@ const SETTINGS_KEY = 'wyth-settings-v1';
 const NOTIFICATIONS_KEY = 'wyth-notifications-v1';
 const AUTH_REQUEST_TIMEOUT_MS = 65_000;
 const AUTH_STATUS_TIMEOUT_MS = 9_000;
-const BILLING_PLANS = Object.freeze(['standard', 'unlimited']);
-const paddleCheckout = createPaddleCheckoutLauncher();
+const modelSession = createByokSession();
 const ACCOUNT_STORAGE_KEYS = Object.freeze([
   STORAGE_KEY,
   ONBOARDING_KEY,
@@ -218,20 +217,7 @@ let schedulerStatus = {
   lastNotifications: [],
   lastSourceMode: 'mock'
 };
-let runtimeStatus = {
-  llm: {
-    configured: false,
-    provider: 'deepseek',
-    label: 'DeepSeek',
-    model: 'local fallback',
-    baseUrl: '',
-    apiMode: '',
-    keyEnv: 'DEEPSEEK_API_KEY',
-    lastChatSource: null,
-    lastChatAt: null
-  },
-  modelOptions: {}
-};
+let runtimeStatus = { llm: modelSession.summary(), modelOptions: {} };
 let modelSettingsState = {
   saving: false,
   errorKey: '',
@@ -240,15 +226,6 @@ let modelSettingsState = {
 let authUiState = createAuthUiState();
 let authFormEmail = '';
 let authInvalidField = '';
-let billingUiState = {
-  loading: false,
-  configured: false,
-  paddle: null,
-  access: null,
-  errorKey: '',
-  checkoutPlan: ''
-};
-let billingTermsAccepted = false;
 let backendMemoryStatus = {};
 let chatUiState = {
   pendingCompanionId: null,
@@ -1161,35 +1138,6 @@ function settingsStatus(key, value = 'settings.status.active') {
   return `<span class="settings-status settings-status-${key}">${tr(value)}</span>`;
 }
 
-function renderBillingSettings() {
-  const access = billingUiState.access || {};
-  const planKey = BILLING_PLANS.includes(access.plan) ? `billing.plan.${access.plan}` : 'billing.plan.none';
-  const checkoutDisabled = !billingUiState.configured || billingUiState.loading;
-  const status = billingUiState.loading
-    ? settingsStatus('coming', 'billing.checking')
-    : billingUiState.configured
-      ? settingsStatus('active', planKey)
-      : settingsStatus('coming', 'billing.notConfiguredShort');
-  return `<div class="studio-card billing-card" aria-busy="${billingUiState.loading}">
-    <div class="studio-row"><h3>${tr('billing.title')}</h3>${status}</div>
-    <p class="studio-muted">${tr('billing.trial')}</p>
-    ${billingUiState.errorKey ? `<p class="auth-error" role="alert">${tr(billingUiState.errorKey)}</p>` : ''}
-    ${!billingUiState.configured && !billingUiState.loading ? `<p class="studio-muted">${tr('billing.notConfigured')}</p>` : ''}
-    <label class="billing-legal-consent">
-      <input type="checkbox" data-billing-terms ${billingTermsAccepted ? 'checked' : ''} ${billingUiState.loading ? 'disabled' : ''}>
-      <span>${tr('billing.acceptPrefix')} <a href="/terms.html" target="_blank" rel="noopener">${tr('billing.termsLink')}</a>${tr('billing.policySeparator')}<a href="/refund.html" target="_blank" rel="noopener">${tr('billing.refundLink')}</a>${tr('billing.acceptSuffix')}</span>
-    </label>
-    <div class="quick-actions billing-plans">
-      <button class="secondary-action" type="button" data-action="billing-checkout" data-plan="standard" ${checkoutDisabled || !billingTermsAccepted ? 'disabled' : ''}>
-        <strong>${tr('billing.standard.title')}</strong><span>${tr('billing.standard.description')}</span>
-      </button>
-      <button class="secondary-action" type="button" data-action="billing-checkout" data-plan="unlimited" ${checkoutDisabled || !billingTermsAccepted ? 'disabled' : ''}>
-        <strong>${tr('billing.unlimited.title')}</strong><span>${tr('billing.unlimited.fairUse')}</span>
-      </button>
-    </div>
-  </div>`;
-}
-
 function renderAccountSettings() {
   const llm = runtimeStatus.llm || {};
   const accountContent = authUiState.mode === 'password'
@@ -1216,9 +1164,7 @@ function renderAccountSettings() {
       <header><div><span class="eyebrow">${tr('settings.full.account')}</span><h3 id="settings-account-heading" tabindex="-1">${tr(headingKey)}</h3></div>${settingsStatus(authUiState.state === 'authenticated' ? 'active' : 'coming', statusKey)}</header>
       <div class="studio-card"><div class="studio-row"><span>${tr('studio.profile')}</span><strong>${escapeHtml(state.user.displayName)}</strong></div><p class="studio-muted">${tr('profile.localNotice')}</p><button class="secondary-action" type="button" data-action="edit-profile">${tr('profile.edit')}</button></div>
       ${accountContent}
-      ${authUiState.state === 'authenticated' ? renderBillingSettings() : ''}
-      <aside class="studio-card product-announcement" role="note" aria-labelledby="model-switch-notice-title"><span class="eyebrow">${tr('announcement.label')}</span><h3 id="model-switch-notice-title">${tr('announcement.modelSwitchTitle')}</h3><p class="studio-muted">${tr('announcement.modelSwitchBody')}</p></aside>
-      <div class="studio-card"><h3>${tr('model.runtime.title')}</h3><div class="studio-row"><span>${tr('model.status')}</span><strong>${tr(llm.configured ? 'status.configured' : 'status.notConfigured')}</strong></div><div class="studio-row"><span>${tr('model.provider')}</span><strong>${escapeHtml(formatModelProvider(llm.provider || 'deepseek'))}</strong></div><div class="studio-row"><span>${tr('model.modelName')}</span><strong>${escapeHtml(llm.model || tr('status.notConfigured'))}</strong></div></div>
+      ${renderModelSettings()}
     </section>`;
 }
 
@@ -1553,63 +1499,22 @@ function renderLegacyStudio(companion) {
 }
 
 function renderModelSettings() {
-  const llm = runtimeStatus.llm || {};
-  const options = runtimeStatus.modelOptions || {};
-  const provider = llm.provider || 'deepseek';
-  const selectedOption = options[provider] || {};
-  const providerOptions = Object.entries(options).length > 0
-    ? Object.entries(options)
-    : [[provider, {
-      label: llm.label || formatModelProvider(provider),
-      defaultModel: llm.model || '',
-      baseUrl: llm.baseUrl || '',
-      apiMode: llm.apiMode || 'chat_completions',
-      keyEnv: llm.keyEnv || 'DEEPSEEK_API_KEY'
-    }]];
+  const llm = modelSession.summary();
   const statusText = modelSettingsState.errorKey
     ? tr(modelSettingsState.errorKey)
     : modelSettingsState.savedAt
       ? tr('model.savedAt', { time: formatTime(modelSettingsState.savedAt) })
-      : llm.configured
-        ? tr('model.ready')
-        : tr('model.keyMissing', { key: llm.keyEnv || selectedOption.keyEnv || tr('model.apiKey') });
-
+      : llm.configured ? tr('model.ready') : tr('status.notConfigured');
   return `
     <div class="studio-card">
       <h3>${tr('model.title')}</h3>
+      <p class="studio-muted">${tr('model.keyLocalNotice')}</p>
       <form class="model-form" data-model-form>
-        <label>
-          ${tr('model.provider')}
-          <select name="provider">
-            ${providerOptions.map(([key, option]) => `
-              <option value="${escapeHtml(key)}" ${key === provider ? 'selected' : ''}>${escapeHtml(option.label)}</option>
-            `).join('')}
-          </select>
-        </label>
-        <label>
-          ${tr('model.modelName')}
-          <input name="model" type="text" value="${escapeHtml(llm.model || selectedOption.defaultModel || '')}" placeholder="${escapeHtml(selectedOption.defaultModel || 'model name')}">
-        </label>
-        <label>
-          ${tr('model.baseUrl')}
-          <input name="baseUrl" type="url" value="${escapeHtml(llm.baseUrl || selectedOption.baseUrl || '')}" placeholder="${escapeHtml(selectedOption.baseUrl || 'https://api.example.com')}">
-        </label>
-        <label>
-          ${tr('model.apiMode')}
-          <select name="apiMode">
-            <option value="chat_completions" ${llm.apiMode === 'chat_completions' ? 'selected' : ''}>${tr('model.chatCompletions')}</option>
-            <option value="responses" ${llm.apiMode === 'responses' ? 'selected' : ''}>${tr('model.responses')}</option>
-          </select>
-        </label>
-        <label>
-          ${tr('model.apiKey')}
-          <input name="apiKey" type="password" value="" autocomplete="off" spellcheck="false" placeholder="${escapeHtml(llm.configured ? tr('model.keyKeepExisting') : tr('model.keyPlaceholder'))}">
-          <small class="model-key-help">${tr('model.keyLocalNotice')}</small>
-        </label>
-        <div class="studio-row"><span>${tr('model.apiKey')}</span><strong>${llm.configured ? tr('model.keyAvailable') : escapeHtml(llm.keyEnv || selectedOption.keyEnv || tr('status.notConfigured'))}</strong></div>
+        <label>${tr('model.modelName')}<input name="model" type="text" maxlength="160" value="${escapeHtml(llm.model || '')}" placeholder="deepseek-chat" required></label>
+        <label>${tr('model.baseUrl')}<input name="baseUrl" type="url" maxlength="2048" value="${escapeHtml(llm.baseUrl || '')}" placeholder="https://api.deepseek.com" required></label>
+        <label>${tr('model.apiMode')}<select name="apiMode"><option value="chat_completions" ${llm.apiMode !== 'responses' ? 'selected' : ''}>${tr('model.chatCompletions')}</option><option value="responses" ${llm.apiMode === 'responses' ? 'selected' : ''}>${tr('model.responses')}</option></select></label>
+        <label>${tr('model.apiKey')}<input name="apiKey" type="password" maxlength="2048" autocomplete="off" spellcheck="false" placeholder="${escapeHtml(llm.configured ? tr('model.keyKeepExisting') : tr('model.keyPlaceholder'))}"></label>
         <div class="studio-row"><span>${tr('model.status')}</span><strong>${escapeHtml(statusText)}</strong></div>
-        ${llm.lastChatError ? `<p class="studio-muted hint model-error">${tr('model.runtimeError')}</p>` : ''}
-        <div class="studio-row"><span>${tr('chat.companion')}</span><strong>${tr('model.companionsUnchanged')}</strong></div>
         <button class="secondary-action" type="submit" ${modelSettingsState.saving ? 'disabled' : ''}>${tr(modelSettingsState.saving ? 'model.saving' : 'model.save')}</button>
       </form>
     </div>
@@ -1657,7 +1562,7 @@ async function selectCompanion(id) {
 }
 
 async function requestAssistantReply(companion, userMessage, priorMessages) {
-  const response = await fetch('/api/chat', {
+  const response = await modelSession.fetch('/api/chat', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ companion, userMessage, priorMessages })
@@ -1677,55 +1582,37 @@ async function requestAssistantReply(companion, userMessage, priorMessages) {
 
 async function refreshRuntimeStatus() {
   try {
-    const response = await fetch('/api/health/ready');
-    const payload = await response.json().catch(() => ({}));
-    if (!payload?.llm) return;
-    runtimeStatus = {
-      ...runtimeStatus,
-      llm: {
-        ...runtimeStatus.llm,
-        ...payload.llm,
-        label: payload.llm.provider === 'deepseek' ? 'DeepSeek' : runtimeStatus.llm.label
-      }
-    };
-    if (settingsState.surface === 'full') {
-      const modelFormFocused = document.activeElement?.closest?.('[data-model-form]');
-      if (!modelFormFocused && settingsState.activeSection === 'account') renderFullSettings(activeCompanion());
-      return;
-    }
-    render({ preserveView: true });
+    await fetch('/api/health/ready', { cache: 'no-store' });
   } catch {
     // Static preview mode has no status endpoint.
   }
+  runtimeStatus = { ...runtimeStatus, llm: modelSession.summary() };
 }
 
 async function saveModelSettings(form) {
   const data = new FormData(form);
   modelSettingsState = { saving: true, errorKey: '', savedAt: null };
   render();
+  let restorePrevious = null;
   try {
-    const response = await fetch('/api/model', {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json'
-      },
-      body: JSON.stringify({
-        provider: data.get('provider'),
-        model: data.get('model'),
-        baseUrl: data.get('baseUrl'),
-        apiMode: data.get('apiMode'),
-        apiKey: data.get('apiKey')
-      })
+    restorePrevious = modelSession.configure({
+      model: data.get('model'),
+      baseUrl: data.get('baseUrl'),
+      apiMode: data.get('apiMode'),
+      apiKey: data.get('apiKey')
     });
-    const payload = await response.json();
-    if (!response.ok) throw new Error(payload?.error || 'Model save failed');
-    runtimeStatus = {
-      ...runtimeStatus,
-      ...payload
-    };
+    const response = await modelSession.fetch('/api/model/test', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{}'
+    });
+    if (!response.ok) throw new Error('model_test_failed');
+    runtimeStatus = { ...runtimeStatus, llm: modelSession.summary() };
     modelSettingsState = { saving: false, errorKey: '', savedAt: new Date().toISOString() };
   } catch (error) {
-    console.error('Wyth model settings save failed', error);
+    restorePrevious?.();
+    runtimeStatus = { ...runtimeStatus, llm: modelSession.summary() };
+    console.warn('Wyth model test failed', String(error?.message || 'unknown'));
     modelSettingsState = {
       saving: false,
       errorKey: 'model.saveFailed',
@@ -1899,8 +1786,6 @@ async function refreshAuthStatus({ renderSettings = true, timeoutMs = AUTH_STATU
     authUiState = reduceAuthState(authUiState, { type: 'STATUS', payload });
     const ownerId = payload.state === 'authenticated' ? payload.user?.id : '';
     storageChanged = switchLocalDataOwner(ownerId);
-    if (payload.state === 'authenticated') void refreshCommerceStatus({ renderSettings: true });
-    else billingUiState = { loading: false, configured: false, paddle: null, access: null, errorKey: '', checkoutPlan: '' };
   } catch (error) {
     const connectionState = error.code === 'auth_unavailable'
       ? { configured: true, state: 'signed_out' }
@@ -1916,65 +1801,6 @@ async function refreshAuthStatus({ renderSettings = true, timeoutMs = AUTH_STATU
   if (storageChanged) render();
   else if (previousAuthState !== authUiState.state) renderFirstUse();
   if (renderSettings && settingsState.surface === 'full' && settingsState.activeSection === 'account') renderFullSettings(activeCompanion());
-}
-
-async function refreshCommerceStatus({ renderSettings = true } = {}) {
-  if (authUiState.state !== 'authenticated') return;
-  billingUiState = { ...billingUiState, loading: true, errorKey: '' };
-  try {
-    const controller = new AbortController();
-    const response = await withAuthDeadline(
-      () => fetch('/api/commerce/status', { signal: controller.signal }),
-      { timeoutMs: AUTH_STATUS_TIMEOUT_MS, onTimeout: () => controller.abort() }
-    );
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error('commerce_unavailable');
-    billingUiState = {
-      loading: false,
-      configured: payload.billingConfigured === true,
-      paddle: payload.paddle || null,
-      access: payload.access || null,
-      errorKey: '',
-      checkoutPlan: ''
-    };
-  } catch {
-    billingUiState = { ...billingUiState, loading: false, errorKey: 'billing.error.status' };
-  }
-  if (renderSettings && settingsState.surface === 'full' && settingsState.activeSection === 'account') {
-    renderFullSettings(activeCompanion());
-  }
-}
-
-async function startBillingCheckout(plan) {
-  if (!BILLING_PLANS.includes(plan) || billingUiState.loading || !billingUiState.configured) return;
-  billingUiState = { ...billingUiState, loading: true, errorKey: '', checkoutPlan: plan };
-  renderFullSettings(activeCompanion());
-  try {
-    const response = await fetch('/api/billing/checkout', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ plan })
-    });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok || !payload.transactionId) throw new Error(payload.error || 'billing_unavailable');
-    await paddleCheckout.open({
-      transactionId: payload.transactionId,
-      config: billingUiState.paddle,
-      locale: onboarding.interfaceLocale
-    });
-    billingUiState = { ...billingUiState, loading: false, errorKey: '', checkoutPlan: '' };
-    renderFullSettings(activeCompanion());
-  } catch (error) {
-    const errorKey = error?.message === 'billing_onboarding_incomplete'
-      ? 'billing.error.onboardingIncomplete'
-      : error?.message === 'billing_domain_pending'
-        ? 'billing.error.domainPending'
-        : error?.message === 'too_many_requests'
-          ? 'billing.error.rateLimited'
-          : 'billing.error.checkout';
-    billingUiState = { ...billingUiState, loading: false, errorKey, checkoutPlan: '' };
-    renderFullSettings(activeCompanion());
-  }
 }
 
 function scheduleColdStartAuthRecovery() {
@@ -2037,7 +1863,6 @@ async function submitAuthForm(form) {
       if (!loginStatus) throw Object.assign(new Error('auth_failed'), { code: 'auth_failed' });
       authUiState = reduceAuthState(authUiState, { type: 'STATUS', payload: loginStatus });
       if (switchLocalDataOwner(loginStatus.user.id)) render();
-      void refreshCommerceStatus({ renderSettings: true });
     }
   } catch (error) {
     authInvalidField = authInvalidFieldFor(error.code);
@@ -2068,7 +1893,8 @@ async function logoutAccount() {
   renderFullSettings(activeCompanion());
   try {
     await authRequest('/api/auth/logout', {});
-    billingUiState = { loading: false, configured: false, paddle: null, access: null, errorKey: '', checkoutPlan: '' };
+    modelSession.clear();
+    runtimeStatus = { ...runtimeStatus, llm: modelSession.summary() };
     if (switchLocalDataOwner('')) render();
     await refreshAuthStatus({ renderSettings: false });
   } catch (error) {
@@ -2201,7 +2027,7 @@ async function openTranslatePopover(selection) {
     : 'Chinese';
 
   try {
-    const response = await fetch('/api/translate', {
+    const response = await modelSession.fetch('/api/translate', {
       method: 'POST',
       headers: {
         'content-type': 'application/json'
@@ -2229,7 +2055,7 @@ async function openNaturalAssist(selection) {
   els.translatePopover.hidden = false;
   els.translatePopover.innerHTML = `<p class="popover-status">${tr('languageAction.naturalLoading')}</p>`;
   try {
-    const response = await fetch('/api/language-assist', {
+    const response = await modelSession.fetch('/api/language-assist', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ text: selection.text, context: selection.context, language: formatLanguage(activeCompanion()?.language) })
@@ -2979,7 +2805,6 @@ els.fullSettings.addEventListener('click', (event) => {
   if (action === 'auth-logout') logoutAccount();
   if (action === 'auth-retry') retryAuthConnection();
   if (action === 'auth-resend') resendSignupConfirmation();
-  if (action === 'billing-checkout') startBillingCheckout(actionButton.dataset.plan);
   if (action === 'edit-companion') openCompanionDialog('edit');
   if (action === 'delete-companion') deleteActiveCompanion();
   if (action === 'daily-pick') addDailyPick();
@@ -3015,13 +2840,6 @@ els.fullSettings.addEventListener('click', (event) => {
   }
 });
 
-els.fullSettings.addEventListener('change', (event) => {
-  const termsInput = event.target.closest('[data-billing-terms]');
-  if (!termsInput) return;
-  billingTermsAccepted = termsInput.checked;
-  renderFullSettings(activeCompanion());
-  els.fullSettingsContent.querySelector('[data-billing-terms]')?.focus();
-});
 els.fullSettings.addEventListener('submit', (event) => {
   const authForm = event.target.closest('[data-auth-form]');
   if (authForm) {

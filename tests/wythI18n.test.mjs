@@ -19,7 +19,7 @@ test('Chinese and English expose identical Wyth interface keys', () => {
   const chineseKeys = Object.keys(WYTH_LOCALES['zh-CN'].strings);
   const englishKeys = Object.keys(WYTH_LOCALES.en.strings);
   assert.deepEqual(chineseKeys.sort(), englishKeys.sort());
-  assert.ok(englishKeys.length >= 180, 'catalog should cover the complete commercial interface');
+  assert.ok(englishKeys.length >= 180, 'catalog should cover the complete product interface');
   assert.ok(Object.values(WYTH_LOCALES.en.strings).every((value) => typeof value === 'string' && value.length > 0));
   assert.ok(Object.values(WYTH_LOCALES['zh-CN'].strings).every((value) => typeof value === 'string' && value.length > 0));
 });
@@ -38,8 +38,6 @@ test('catalog covers every current and planned user-facing surface', () => {
     'settings.reduceMotion',
     'settings.full.privacy',
     'settings.quick.readingMode',
-    'announcement.modelSwitchTitle',
-    'announcement.modelSwitchBody',
     'settings.status.active',
     'vocabulary.title',
     'languageAction.translate',

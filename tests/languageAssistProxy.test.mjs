@@ -52,3 +52,10 @@ test('language assist passes the request to a fresh client provider', async () =
   assert.equal(receivedRequest, request);
   assert.equal((await response.json()).source, 'llm');
 });
+
+test('production BYOK language assistance fails explicitly without a fake rewrite', async () => {
+  const handler = createLanguageAssistProxyHandler({ strict: true, llmClient: async () => { throw new Error('offline'); } });
+  const response = await handler({ method: 'POST', json: async () => ({ text: 'I very like it' }) });
+  assert.equal(response.status, 503);
+  assert.deepEqual(await response.json(), { error: 'model_unavailable', retryable: true });
+});

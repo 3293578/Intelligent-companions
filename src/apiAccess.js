@@ -3,7 +3,6 @@ import { createHash } from 'node:crypto';
 export function isPublicApiPath(pathname = '') {
   return pathname === '/api/health'
     || pathname === '/api/health/ready'
-    || pathname === '/api/billing/paddle/webhook'
     || pathname.startsWith('/api/auth/');
 }
 

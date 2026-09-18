@@ -133,7 +133,7 @@ export function createChatProxyHandler(options = {}) {
         }
       }
 
-      if (llmFailed && options.allowLocalFallback === false) {
+      if (options.allowLocalFallback === false) {
         return jsonResponse({
           error: 'model_unavailable',
           retryable: true,

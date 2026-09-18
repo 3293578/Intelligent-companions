@@ -5,48 +5,32 @@ import { readFileSync } from 'node:fs';
 const appJs = readFileSync(new URL('../src/app.js', import.meta.url), 'utf8');
 const i18nJs = readFileSync(new URL('../src/wythI18n.js', import.meta.url), 'utf8');
 const serverJs = readFileSync(new URL('../server.mjs', import.meta.url), 'utf8');
+const accountSettings = appJs.slice(appJs.indexOf('function renderAccountSettings'), appJs.indexOf('function renderAuthForm'));
 
-test('account settings expose server-backed billing status and checkout actions', () => {
-  assert.match(appJs, /authUiState\.state === 'authenticated'[\s\S]*renderBillingSettings\(\)/);
-  assert.match(appJs, /fetch\('\/api\/commerce\/status'/);
-  assert.match(appJs, /fetch\('\/api\/billing\/checkout'/);
-  assert.match(appJs, /data-action="billing-checkout"/);
-  assert.match(appJs, /data-plan="standard"/);
-  assert.match(appJs, /data-plan="unlimited"/);
+test('account settings expose free user-supplied model configuration', () => {
+  assert.match(appJs, /createByokSession/);
+  assert.match(accountSettings, /renderModelSettings\(\)/);
+  assert.match(appJs, /modelSession\.fetch\('\/api\/model\/test'/);
+  assert.doesNotMatch(accountSettings, /renderBillingSettings\(\)/);
 });
 
-test('billing status refresh never blocks authentication completion', () => {
-  assert.match(appJs, /payload\.state === 'authenticated'\) void refreshCommerceStatus/);
-  assert.doesNotMatch(appJs, /payload\.state === 'authenticated'\) await refreshCommerceStatus/);
-});
-
-test('checkout UI accepts server-owned plans and opens only server-created transactions', () => {
-  assert.match(appJs, /BILLING_PLANS\s*=\s*Object\.freeze\(\['standard', 'unlimited'\]\)/);
-  assert.match(appJs, /BILLING_PLANS\.includes\(plan\)/);
-  assert.match(appJs, /paddleCheckout\.open\(/);
-  assert.match(appJs, /transactionId:\s*payload\.transactionId/);
-  assert.doesNotMatch(appJs, /window\.location\.assign\(checkoutUrl/);
-  assert.doesNotMatch(appJs, /priceId\s*:/);
-});
-
-test('commerce status reports Paddle.js client configuration only when billing is complete', () => {
-  assert.match(serverJs, /billingConfigured:\s*hostedBillingConfigured/);
-  assert.match(serverJs, /paddle:\s*paddleClientConfig/);
-});
-
-test('billing copy discloses trial, recurring prices, and fair use', () => {
-  for (const key of [
-    'billing.title',
-    'billing.trial',
-    'billing.standard.title',
-    'billing.unlimited.title',
-    'billing.unlimited.fairUse',
-    'billing.notConfigured',
-    'billing.error.onboardingIncomplete'
-  ]) {
-    assert.match(i18nJs, new RegExp(`\\['${key}'`));
+test('chat and language tools share the same request-scoped model session', () => {
+  for (const route of ['chat', 'translate', 'language-assist']) {
+    assert.match(appJs, new RegExp(`modelSession\\.fetch\\('\\/api\\/${route}'`));
   }
-  assert.match(i18nJs, /\['billing\.standard\.title', 'Standard · \$5\/月', 'Standard · \$5\/month'\]/);
-  assert.match(i18nJs, /\['billing\.standard\.description', '[^']*2 美元[^']*', 'Includes about \$2 of monthly model usage\./);
-  assert.match(i18nJs, /\['billing\.unlimited\.title', 'Unlimited · \$10\/月', 'Unlimited · \$10\/month'\]/);
+  assert.match(serverJs, /parseModelConfiguration\(request\.headers\['x-wyth-model'\]\)/);
+});
+
+test('legacy payment and global model configuration endpoints are retired', () => {
+  assert.match(serverJs, /pathname\.startsWith\('\/api\/billing\/'\)/);
+  assert.match(serverJs, /error: 'feature_removed', mode: 'free_byok'/);
+  assert.match(serverJs, /pathname\.startsWith\('\/api\/commerce\/'\)/);
+  assert.match(serverJs, /requestUrl\.pathname === '\/api\/model'/);
+  assert.doesNotMatch(serverJs, /createPaddleBillingClient|createCommerceRuntime|createModelConfigStore/);
+});
+
+test('copy clearly explains free BYOK behavior and volatile credential storage', () => {
+  assert.match(i18nJs, /Wyth 完全免费且不提供模型/);
+  assert.match(i18nJs, /only in this tab memory/);
+  assert.match(i18nJs, /关闭、刷新或退出登录即清除/);
 });
