@@ -110,3 +110,96 @@ test('BYOK client cannot silently fall back to the operator environment key', ()
     else process.env.DEEPSEEK_API_KEY = previous;
   }
 });
+
+test('late rollbacks cannot resurrect a key after sign out or override newer settings', async () => {
+  const session = createByokSession({ fetchImpl: async () => new Response('{}') });
+  session.configure({ baseUrl: 'https://one.example.com', model: 'one', apiKey: 'old-key' });
+  const firstCheckpoint = session.checkpoint();
+  const rollback = session.configure({ baseUrl: 'https://two.example.com', model: 'two', apiKey: 'new-key' });
+  assert.equal(firstCheckpoint(), false);
+  const pendingCheckpoint = session.checkpoint();
+  session.clear();
+  assert.equal(pendingCheckpoint(), false);
+  rollback();
+  assert.equal(session.summary().configured, false);
+  await assert.rejects(session.fetch('/api/chat'), /model_configuration_required/);
+  session.configure({ baseUrl: 'https://three.example.com', model: 'three', apiKey: 'third-key' });
+  rollback();
+  assert.equal(session.summary().model, 'three');
+});
+
+test('changing destination requires a new key and logout aborts in-flight requests', async () => {
+  let signal;
+  const session = createByokSession({ fetchImpl: async (_url, options) => { signal = options.signal; return new Response('{}'); } });
+  session.configure({ baseUrl: 'https://one.example.com', model: 'one', apiKey: 'old-key' });
+  assert.throws(() => session.configure({ baseUrl: 'https://two.example.com', model: 'two', apiKey: '' }));
+  await session.fetch('/api/chat', { method: 'POST' });
+  assert.equal(signal.aborted, false);
+  session.clear();
+  assert.equal(signal.aborted, true);
+});
+
+function fakeRelay(status, contents, mode = '') {
+  const config = parseModelConfiguration(header({ baseUrl: 'https://api.example.com', model: 'm', apiKey: 'key' }));
+  return createByokFetch(config, {
+    resolve: async () => [{ address: '93.184.216.34', family: 4 }],
+    request(_url, _options, callback) {
+      const req = new EventEmitter();
+      req.end = () => {
+        const res = new PassThrough();
+        res.statusCode = status;
+        callback(res);
+        if (mode === 'aborted') res.emit('aborted');
+        else res.end(contents);
+      };
+      return req;
+    }
+  });
+}
+
+for (const status of [204, 205, 304, 302]) {
+  test(`provider HTTP ${status} rejects safely without crashing the server`, async () => {
+    const relay = fakeRelay(status, '');
+    await assert.rejects(relay('https://api.example.com/chat/completions', { method: 'POST' }), /invalid_model_response|model_redirect_not_allowed/);
+  });
+}
+
+test('oversized and interrupted provider responses fail explicitly', async () => {
+  const oversized = fakeRelay(200, Buffer.alloc(1024 * 1024 + 1));
+  await assert.rejects(oversized('https://api.example.com/chat/completions', { method: 'POST' }), /model_response_too_large/);
+  const aborted = fakeRelay(200, '', 'aborted');
+  await assert.rejects(aborted('https://api.example.com/chat/completions', { method: 'POST' }), /model_response_aborted/);
+});
+
+test('DNS cancellation does not open a socket and recovers for the next request', async () => {
+  const config = parseModelConfiguration(header({ baseUrl: 'https://api.example.com', model: 'm', apiKey: 'key' }));
+  const controller = new AbortController();
+  let opened = false;
+  const relay = createByokFetch(config, { resolve: () => new Promise(() => {}), request() { opened = true; } });
+  const pending = relay('https://api.example.com/chat/completions', { method: 'POST', signal: controller.signal });
+  controller.abort();
+  await assert.rejects(pending, /model_timeout/);
+  assert.equal(opened, false);
+  const healthy = fakeRelay(200, '{"ok":true}');
+  assert.deepEqual(await (await healthy('https://api.example.com/chat/completions', { method: 'POST' })).json(), { ok: true });
+});
+
+test('100 parallel user sessions never share keys and all concurrency slots recover', async () => {
+  const acquire = createConcurrencyGate({ totalLimit: 100, userLimit: 2 });
+  await Promise.all(Array.from({ length: 100 }, async (_, index) => {
+    const release = acquire(String(index));
+    assert.equal(typeof release, 'function');
+    try {
+      const session = createByokSession({ fetchImpl: async (_url, options) => {
+        await new Promise((resolve) => setTimeout(resolve, index % 4));
+        assert.equal(JSON.parse(decodeURIComponent(options.headers['x-wyth-model'])).apiKey, `key-${index}`);
+        return new Response('{}');
+      } });
+      session.configure({ baseUrl: 'https://api.example.com', model: `m-${index}`, apiKey: `key-${index}` });
+      await session.fetch('/api/chat', { method: 'POST' });
+    } finally { release(); }
+  }));
+  const releases = Array.from({ length: 100 }, (_, i) => acquire(String(i)));
+  assert.equal(releases.every((release) => typeof release === 'function'), true);
+  releases.forEach((release) => release());
+});

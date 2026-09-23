@@ -5,6 +5,10 @@ export function createByokSession({ fetchImpl = globalThis.fetch } = {}) {
   const clear = () => { generation.abort(); generation = new AbortController(); config = null; };
   return {
     clear,
+    checkpoint() {
+      const current = generation;
+      return () => generation === current && !current.signal.aborted;
+    },
     summary() {
       if (!config) return { configured: false, provider: 'custom', model: '', baseUrl: '', apiMode: 'chat_completions' };
       const { apiKey, ...safe } = config;
@@ -22,7 +26,11 @@ export function createByokSession({ fetchImpl = globalThis.fetch } = {}) {
       if (!model || model.length > 160 || /[\x00-\x1f\x7f]/.test(model) || !apiKey || apiKey.length > 2048 || /[^\x21-\x7e]/.test(apiKey) || baseUrl.length > 2048) throw new Error('invalid_model_configuration');
       clear();
       config = { model, baseUrl, apiKey, apiMode: input.apiMode === 'responses' ? 'responses' : 'chat_completions' };
+      const configuredGeneration = generation;
       return () => {
+        // A late failed test must not resurrect credentials after logout/account change,
+        // or replace a newer configuration. A rollback can run only once.
+        if (generation !== configuredGeneration) return;
         generation.abort();
         generation = new AbortController();
         config = previous;

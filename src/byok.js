@@ -47,7 +47,7 @@ export function createByokFetch(config, { resolve = lookup, request = https.requ
       const abort = () => reject(new Error('model_timeout'));
       if (signal.aborted) return abort();
       signal.addEventListener('abort', abort, { once: true });
-      Promise.resolve(resolve(base.hostname, { all: true, family: 4 })).then(accept, reject)
+      Promise.resolve().then(() => resolve(base.hostname, { all: true, family: 4 })).then(accept, reject)
         .finally(() => signal.removeEventListener('abort', abort));
     });
     if (!records.length || records.some(({ address }) => !isPublicIPv4(address))) throw new Error('invalid_model_destination');
@@ -62,6 +62,11 @@ export function createByokFetch(config, { resolve = lookup, request = https.requ
           else callback(null, pinned.address, pinned.family);
         }
       }, (res) => {
+        // A null-body HTTP status must never throw from an EventEmitter callback.
+        if (!Number.isInteger(res.statusCode) || res.statusCode < 200 || res.statusCode > 599
+            || [204, 205, 304].includes(res.statusCode)) {
+          res.destroy(); reject(new Error('invalid_model_response')); return;
+        }
         if (res.statusCode >= 300 && res.statusCode < 400) {
           res.destroy(); reject(new Error('model_redirect_not_allowed')); return;
         }
@@ -73,7 +78,11 @@ export function createByokFetch(config, { resolve = lookup, request = https.requ
           chunks.push(chunk);
         });
         res.on('error', reject);
-        res.on('end', () => accept(new Response(Buffer.concat(chunks), { status: res.statusCode })));
+        res.on('aborted', () => reject(new Error('model_response_aborted')));
+        res.on('end', () => {
+          try { accept(new Response(Buffer.concat(chunks), { status: res.statusCode })); }
+          catch { reject(new Error('invalid_model_response')); }
+        });
       });
       req.on('error', reject);
       req.end(options.body);

@@ -9,8 +9,10 @@ test('all responses receive a restrictive browser security policy', () => {
   assert.equal(headers['x-frame-options'], 'DENY');
   assert.match(headers['content-security-policy'], /default-src 'self'/);
   assert.match(headers['content-security-policy'], /frame-ancestors 'none'/);
-  assert.match(headers['content-security-policy'], /script-src 'self' https:\/\/cdn\.paddle\.com/);
-  assert.match(headers['content-security-policy'], /frame-src https:\/\/\*\.paddle\.com https:\/\/\*\.paddle\.io/);
+  assert.match(headers['content-security-policy'], /script-src 'self';/);
+  assert.match(headers['content-security-policy'], /connect-src 'self';/);
+  assert.match(headers['content-security-policy'], /frame-src 'none'/);
+  assert.doesNotMatch(headers['content-security-policy'], /paddle/);
   assert.equal('strict-transport-security' in headers, false);
 });
 

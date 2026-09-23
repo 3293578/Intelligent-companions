@@ -454,6 +454,9 @@ function loadOwnedNotificationPreferences() {
 function switchLocalDataOwner(nextUserId = '') {
   const nextOwner = String(nextUserId || '');
   if (nextOwner === storageOwnerId) return false;
+  modelSession.clear();
+  modelSettingsState = { saving: false, errorKey: '', savedAt: null };
+  runtimeStatus = { ...runtimeStatus, llm: modelSession.summary() };
   if (nextOwner && !storageOwnerId) migrateGuestStorage(localStorage, ACCOUNT_STORAGE_KEYS, nextOwner);
   if (nextOwner) rememberLocalOwner(localStorage, nextOwner);
   else clearRememberedLocalOwner(localStorage);
@@ -1594,6 +1597,7 @@ async function saveModelSettings(form) {
   modelSettingsState = { saving: true, errorKey: '', savedAt: null };
   render();
   let restorePrevious = null;
+  let stillCurrent = () => true;
   try {
     restorePrevious = modelSession.configure({
       model: data.get('model'),
@@ -1601,15 +1605,18 @@ async function saveModelSettings(form) {
       apiMode: data.get('apiMode'),
       apiKey: data.get('apiKey')
     });
+    stillCurrent = modelSession.checkpoint();
     const response = await modelSession.fetch('/api/model/test', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: '{}'
     });
+    if (!stillCurrent()) return;
     if (!response.ok) throw new Error('model_test_failed');
     runtimeStatus = { ...runtimeStatus, llm: modelSession.summary() };
     modelSettingsState = { saving: false, errorKey: '', savedAt: new Date().toISOString() };
   } catch (error) {
+    if (!stillCurrent()) return;
     restorePrevious?.();
     runtimeStatus = { ...runtimeStatus, llm: modelSession.summary() };
     console.warn('Wyth model test failed', String(error?.message || 'unknown'));
@@ -1655,6 +1662,7 @@ async function clearActiveMemory() {
 
 async function sendMessage(content) {
   if (!canSendChatMessage(chatUiState, content)) return;
+  const stillCurrent = modelSession.checkpoint();
   const companion = activeCompanion();
   const userMessage = createUserMessage(companion.id, content);
   const prior = companionMessages(companion.id);
@@ -1663,6 +1671,15 @@ async function sendMessage(content) {
   state.companions = state.companions.map((item) => item.id === companion.id ? updatedCompanion : item);
   state.messages = [...state.messages, userMessage];
   chatUiState = beginChatSend(chatUiState, companion.id);
+  const pendingState = chatUiState;
+  const discardStaleSend = () => {
+    if (stillCurrent()) return false;
+    if (chatUiState === pendingState) {
+      chatUiState = completeChatSend(chatUiState, companion.id);
+      render();
+    }
+    return true;
+  };
   saveState();
   render();
 
@@ -1670,11 +1687,13 @@ async function sendMessage(content) {
   try {
     reply = await requestAssistantReply(updatedCompanion, userMessage, prior);
   } catch (error) {
+    if (discardStaleSend()) return;
     chatUiState = completeChatSend(chatUiState, companion.id, chatFailureMessageKey(error?.message));
     render();
     await refreshRuntimeStatus();
     return;
   }
+  if (discardStaleSend()) return;
   const support = reply.metadata?.support || assessSupportSignal(
     [...prior, userMessage],
     { emotion: reply.metadata?.emotion }
@@ -1889,6 +1908,9 @@ async function resendSignupConfirmation() {
 }
 
 async function logoutAccount() {
+  modelSession.clear();
+  modelSettingsState = { saving: false, errorKey: '', savedAt: null };
+  runtimeStatus = { ...runtimeStatus, llm: modelSession.summary() };
   authUiState = reduceAuthState(authUiState, { type: 'BUSY' });
   renderFullSettings(activeCompanion());
   try {
@@ -2006,6 +2028,7 @@ function renderTranslatePopover(view) {
 }
 
 async function openTranslatePopover(selection) {
+  const stillCurrent = modelSession.checkpoint();
   hideTranslateTrigger();
   window.getSelection()?.removeAllRanges();
   activeTranslation = null;
@@ -2040,16 +2063,17 @@ async function openTranslatePopover(selection) {
     });
     const payload = await response.json();
     if (!response.ok || payload?.error) throw new Error(payload?.error || 'Translate failed');
-    if (els.translatePopover.hidden) return;
+    if (!stillCurrent() || els.translatePopover.hidden) return;
     activeTranslation = { selection, payload };
     renderTranslatePopover({ status: 'ready', selection, payload });
   } catch {
-    if (els.translatePopover.hidden) return;
+    if (!stillCurrent() || els.translatePopover.hidden) return;
     renderTranslatePopover({ status: 'error', selection });
   }
 }
 
 async function openNaturalAssist(selection) {
+  const stillCurrent = modelSession.checkpoint();
   hideTranslateTrigger();
   positionTranslatePopover(selection.anchor);
   els.translatePopover.hidden = false;
@@ -2062,12 +2086,14 @@ async function openNaturalAssist(selection) {
     });
     const payload = await response.json();
     if (!response.ok || payload.error) throw new Error(payload.error || 'Language assist failed');
+    if (!stillCurrent() || els.translatePopover.hidden) return;
     els.translatePopover.innerHTML = `
       <div class="popover-header"><span class="selected-text">${tr('languageAction.naturalTitle')}</span><button class="popover-close" type="button" data-action="close-popover" aria-label="${escapeHtml(tr('languageAction.close'))}">x</button></div>
       <p class="natural-alternative">${escapeHtml(payload.result.naturalAlternative)}</p>
       <p class="explanation">${escapeHtml(payload.result.note || '')}</p>
     `;
   } catch {
+    if (!stillCurrent() || els.translatePopover.hidden) return;
     els.translatePopover.innerHTML = `<p class="popover-status">${tr('languageAction.naturalUnavailable')}</p>`;
   }
 }
