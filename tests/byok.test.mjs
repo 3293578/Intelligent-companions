@@ -4,7 +4,15 @@ import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 
 import { createByokFetch, createConcurrencyGate, isPublicIPv4, parseModelConfiguration } from '../src/byok.js';
-import { createByokSession } from '../src/byokSession.js';
+import { createByokSession, modelTestErrorKey } from '../src/byokSession.js';
+
+test('model test distinguishes account failures from provider configuration failures', () => {
+  for (const [code, key] of Object.entries({ authentication_required: 'loginRequired', auth_unavailable: 'authUnavailable', email_not_verified: 'emailRequired', model_provider_auth: 'providerAuth', model_provider_request: 'providerRequest', model_provider_limit: 'providerLimit', invalid_model_configuration: 'invalidConfiguration' })) {
+    assert.equal(modelTestErrorKey({ code }), `model.${key}`);
+  }
+  assert.equal(modelTestErrorKey({ status: 429 }), 'model.rateLimited');
+  assert.equal(modelTestErrorKey(new Error('unknown')), 'model.saveFailed');
+});
 import { createOpenAIResponsesClient } from '../src/openaiClient.js';
 
 function header(value) {

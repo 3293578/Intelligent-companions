@@ -409,13 +409,13 @@ test('first use distinguishes returning users and keeps an accessible sign-in sh
   assert.match(css, /\.onboarding-login:focus-visible/);
 });
 
-test('account access is persistent and onboarding groups sign-in with language controls', () => {
+test('account access is persistent and onboarding avoids duplicate language controls', () => {
   assert.match(html, /id="accountEntryButton"[^>]*type="button"/);
   assert.match(html, /id="globalLanguageSwitch"[^>]*role="group"/);
   assert.match(html, /data-global-locale="zh-CN"/);
   assert.match(html, /data-global-locale="en"/);
   assert.match(html, /class="onboarding-account-nav"/);
-  assert.match(html, /class="onboarding-account-divider"/);
+  assert.doesNotMatch(html, /class="onboarding-account-divider"/);
   assert.match(appJs, /accountEntryButton:\s*document\.querySelector\('#accountEntryButton'\)/);
   assert.match(appJs, /globalLanguageSwitch:\s*document\.querySelector\('#globalLanguageSwitch'\)/);
   assert.match(appJs, /accountEntryButton\.addEventListener\('click',\s*openAccountSurface\)/);
@@ -475,7 +475,9 @@ test('mobile transcript never exposes a horizontal scrollbar for long content', 
 });
 
 test('first use exposes language and birthday before companion selection', () => {
-  assert.match(html, /id="interfaceLanguageSwitch"/);
+  assert.doesNotMatch(html, /id="interfaceLanguageSwitch"/);
+  assert.match(html, /id="globalLanguageSwitch"/);
+  assert.match(appJs, /els\.globalLanguageSwitch\.hidden = false/);
   assert.match(html, /id="onboardingLanguageOptions"[^>]*role="group"[^>]*aria-labelledby="firstUseLanguageTitle"/);
   assert.match(html, /class="onboarding-language-choice"[^>]*data-locale="zh-CN"/);
   assert.match(html, /class="onboarding-language-choice"[^>]*data-locale="en"/);
@@ -495,7 +497,7 @@ test('language switching updates document metadata without reloading', () => {
   assert.match(appJs, /document\.documentElement\.lang/);
   assert.match(appJs, /data-i18n-placeholder/);
   assert.match(appJs, /aria-pressed/);
-  assert.match(appJs, /globalLanguageSwitch\.hidden\s*=\s*Boolean\(firstUseVisible\)/);
+  assert.match(appJs, /globalLanguageSwitch\.hidden\s*=\s*false/);
   assert.match(appJs, /dataset\.globalLocale/);
   assert.doesNotMatch(appJs, /location\.reload\(\)/);
 });

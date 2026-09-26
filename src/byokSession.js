@@ -1,3 +1,16 @@
+export function modelTestErrorKey(error = {}) {
+  const code = error.code || error.message;
+  if (code === 'authentication_required') return 'model.loginRequired';
+  if (code === 'auth_unavailable' || code === 'auth_not_configured') return 'model.authUnavailable';
+  if (code === 'email_not_verified') return 'model.emailRequired';
+  if (code === 'invalid_model_configuration' || code === 'model_configuration_required' || error instanceof TypeError && /URL/i.test(error.message)) return 'model.invalidConfiguration';
+  if (code === 'model_provider_auth') return 'model.providerAuth';
+  if (code === 'model_provider_request') return 'model.providerRequest';
+  if (code === 'model_provider_limit') return 'model.providerLimit';
+  if (error.status === 429) return 'model.rateLimited';
+  return 'model.saveFailed';
+}
+
 // This module deliberately has no storage API. Reloading or signing out clears the key.
 export function createByokSession({ fetchImpl = globalThis.fetch } = {}) {
   let config = null;

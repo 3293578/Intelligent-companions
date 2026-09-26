@@ -111,6 +111,13 @@ async function handleModelRequest(request, response, userId) {
         : createLanguageAssistProxyHandler({ llmClientProvider, strict: true });
     await sendJsonProxyResponse(response, await handler(proxyRequest));
   } catch (error) {
+    if (new URL(request.url, appOrigin).pathname === '/api/model/test' && !response.destroyed) {
+      const code = [401, 403].includes(error?.status) ? 'model_provider_auth'
+        : [400, 404, 405, 422].includes(error?.status) ? 'model_provider_request'
+          : error?.status === 429 ? 'model_provider_limit' : 'model_unavailable';
+      sendJson(response, { error: code }, 502);
+      return;
+    }
     if (!response.destroyed) sendJson(response, { error: error?.status === 413 ? 'request_too_large' : 'model_unavailable', retryable: true }, error?.status === 413 ? 413 : 503);
   } finally {
     response.off('close', disconnected);

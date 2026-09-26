@@ -112,7 +112,7 @@ import {
   readRememberedLocalOwner,
   rememberLocalOwner
 } from './accountStorage.js';
-import { createByokSession } from './byokSession.js';
+import { createByokSession, modelTestErrorKey } from './byokSession.js';
 
 const STORAGE_KEY = 'english-companions-state-v1';
 const MOTION_KEY = 'wyth-reduce-motion';
@@ -189,7 +189,6 @@ const els = {
   firstUse: document.querySelector('#firstUse'),
   onboardingLoginButton: document.querySelector('#onboardingLoginButton'),
   sceneAtmosphere: document.querySelector('#sceneAtmosphere'),
-  interfaceLanguageSwitch: document.querySelector('#interfaceLanguageSwitch'),
   onboardingBirthdayForm: document.querySelector('#onboardingBirthdayForm'),
   onboardingBirthday: document.querySelector('#onboardingBirthday'),
   birthdayError: document.querySelector('#birthdayError'),
@@ -377,7 +376,7 @@ function changeInterfaceLocale(locale, source) {
       ? els.globalLanguageSwitch.querySelector(`[data-global-locale="${onboarding.interfaceLocale}"]`)
       : source === 'drawer' && activeDrawer === 'settings'
         ? els.studioPanel.querySelector(selector)
-        : els.interfaceLanguageSwitch.querySelector(selector);
+        : els.firstUse.querySelector(selector);
     if (button && button.getClientRects().length > 0) button.focus();
   });
 }
@@ -636,7 +635,7 @@ function renderFirstUse() {
 function syncAccountEntry(firstUseVisible = !els.firstUse.hidden) {
   const authenticated = authUiState.state === 'authenticated';
   els.accountEntryButton.hidden = Boolean(firstUseVisible);
-  els.globalLanguageSwitch.hidden = Boolean(firstUseVisible);
+  els.globalLanguageSwitch.hidden = false;
   const labelKey = authenticated ? 'settings.full.account' : 'auth.login';
   els.accountEntryButton.dataset.i18n = labelKey;
   els.accountEntryButton.textContent = tr(labelKey);
@@ -1512,9 +1511,9 @@ function renderModelSettings() {
     <div class="studio-card">
       <h3>${tr('model.title')}</h3>
       <p class="studio-muted">${tr('model.keyLocalNotice')}</p>
-      <form class="model-form" data-model-form>
+      <form class="model-form" data-model-form autocomplete="off">
         <label>${tr('model.modelName')}<input name="model" type="text" maxlength="160" value="${escapeHtml(llm.model || '')}" placeholder="deepseek-chat" required></label>
-        <label>${tr('model.baseUrl')}<input name="baseUrl" type="url" maxlength="2048" value="${escapeHtml(llm.baseUrl || '')}" placeholder="https://api.deepseek.com" required></label>
+        <label>${tr('model.baseUrl')}<input name="baseUrl" type="url" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="2048" value="${escapeHtml(llm.baseUrl || '')}" placeholder="https://api.deepseek.com" required></label>
         <label>${tr('model.apiMode')}<select name="apiMode"><option value="chat_completions" ${llm.apiMode !== 'responses' ? 'selected' : ''}>${tr('model.chatCompletions')}</option><option value="responses" ${llm.apiMode === 'responses' ? 'selected' : ''}>${tr('model.responses')}</option></select></label>
         <label>${tr('model.apiKey')}<input name="apiKey" type="password" maxlength="2048" autocomplete="off" spellcheck="false" placeholder="${escapeHtml(llm.configured ? tr('model.keyKeepExisting') : tr('model.keyPlaceholder'))}"></label>
         <div class="studio-row"><span>${tr('model.status')}</span><strong>${escapeHtml(statusText)}</strong></div>
@@ -1612,17 +1611,20 @@ async function saveModelSettings(form) {
       body: '{}'
     });
     if (!stillCurrent()) return;
-    if (!response.ok) throw new Error('model_test_failed');
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw Object.assign(new Error('model_test_failed'), { code: payload.error, status: response.status });
+    }
     runtimeStatus = { ...runtimeStatus, llm: modelSession.summary() };
     modelSettingsState = { saving: false, errorKey: '', savedAt: new Date().toISOString() };
   } catch (error) {
     if (!stillCurrent()) return;
     restorePrevious?.();
     runtimeStatus = { ...runtimeStatus, llm: modelSession.summary() };
-    console.warn('Wyth model test failed', String(error?.message || 'unknown'));
+    console.warn('Wyth model test failed', modelTestErrorKey(error));
     modelSettingsState = {
       saving: false,
-      errorKey: 'model.saveFailed',
+      errorKey: modelTestErrorKey(error),
       savedAt: null
     };
   }
